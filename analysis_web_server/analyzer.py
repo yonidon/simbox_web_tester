@@ -56,7 +56,7 @@ def get_data():
     markers = df_clean.to_dict(orient='records')
     
     # Grid Logic (0.002 degree blocks)
-    grid_size = 0.002
+    grid_size = 0.0002
     df_clean['grid_lat'] = (df_clean['LATITUDE'] / grid_size).apply(lambda x: round(x) * grid_size)
     df_clean['grid_lng'] = (df_clean['LONGITUDE'] / grid_size).apply(lambda x: round(x) * grid_size)
     

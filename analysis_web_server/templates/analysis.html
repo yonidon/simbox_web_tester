@@ -166,6 +166,15 @@
                 fillOpacity: 0.9, 
                 weight: 1
             }).addTo(markerLayer);
+
+            // --- ADD THIS CLICK EVENT ---
+            marker.on('click', function(e) {
+                // Zoom in to level 18 (house level) centered on the click
+                map.flyTo(e.latlng, 25, {
+                    animate: true,
+                    duration: 1.0 // seconds
+                });
+            });
             
             // 2. Verbose Tooltip (Shown on Hover)
             const verboseInfo = `
@@ -196,7 +205,7 @@
             const color = avg > 80 ? '#22c55e' : (avg > 50 ? '#eab308' : '#ef4444');
 
             const rect = L.rectangle(
-                [[g.lat - 0.001, g.lng - 0.001], [g.lat + 0.001, g.lng + 0.001]],
+                [[g.lat - 0.0001, g.lng - 0.0001], [g.lat + 0.0001, g.lng + 0.0001]],
                 { color: color, weight: 1, fillOpacity: 0.3, pane: 'gridPane' }
             ).addTo(gridLayer);
 
