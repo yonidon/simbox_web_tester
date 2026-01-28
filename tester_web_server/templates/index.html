@@ -28,14 +28,10 @@
     </style>
 </head>
 <body>
-
     <div class="card">
         <h2>Session Config</h2>
         <input type="text" id="sessionName" placeholder="Enter session name...">
         <button class="btn btn-primary" onclick="updateSession()">Set Session</button>
-        <button class="btn btn-primary" style="margin-top:10px; background:#475569;" onclick="window.location.href='/export_csv'">
-            EXPORT TO CSV
-        </button>
         <div class="grid" style="margin-top: 15px;">
             <button class="btn btn-start" onclick="startSystem()">START SURVEY</button>
             <button class="btn btn-stop" onclick="fetch('/stop_script', {method:'POST'})">STOP SURVEY</button>
@@ -69,6 +65,12 @@
             Lng: <span id="lng">0.00000</span><br>
             Session: <span id="activeSession" style="color:var(--accent)">-</span>
         </div>
+    </div>
+
+    <div class="card">
+        <button class="btn btn-primary" style="margin-top:10px; background:#475569;" onclick="window.location.href='/export_csv'">
+            EXPORT TO CSV
+        </button>
     </div>
 
     <script>

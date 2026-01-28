@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SIMBOX Analysis Pro</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --sidebar-w: 320px; --accent: #2563eb; }
+        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+        
+        #layout { display: flex; height: 100vh; width: 100vw; }
+        
+        #sidebar { 
+            width: var(--sidebar-w); 
+            background: #1e293b; 
+            color: white; 
+            padding: 20px; 
+            display: flex; 
+            flex-direction: column; 
+            box-sizing: border-box;
+            z-index: 1001;
+        }
+
+        #main { flex: 1; display: flex; flex-direction: column; background: #f8fafc; position: relative; }
+        
+        .tabs { 
+            height: 60px; 
+            background: white; 
+            border-bottom: 1px solid #e2e8f0; 
+            display: flex; 
+            align-items: center; 
+            padding: 0 20px; 
+            gap: 10px;
+            flex-shrink: 0;
+        }
+
+        .tab-btn { padding: 10px 20px; cursor: pointer; border-radius: 6px; font-weight: 600; color: #64748b; border: 1px solid transparent; }
+        .tab-btn.active { background: #eff6ff; color: var(--accent); border-color: #dbeafe; }
+        
+        /* Map must have flex: 1 to fill the #main container */
+        .tab-content { flex: 1; display: none; flex-direction: column; width: 100%; height: 100%; }
+        .tab-content.active { display: flex; }
+        
+        #map { width: 100%; height: 100%; flex: 1; }
+
+        .stats-container { flex: 1; overflow-y: auto; margin-top: 20px; }
+        .local-stat-box { background: #0f172a; padding: 12px; border-radius: 6px; margin-bottom: 8px; border-left: 4px solid var(--accent); font-size: 13px; }
+        
+        .btn-upload { background: var(--accent); color: white; border: none; padding: 10px; width: 100%; border-radius: 4px; cursor: pointer; font-weight: bold; }
+        input[type="file"] { margin-bottom: 10px; font-size: 12px; }
+    </style>
+</head>
+<body>
+
+<div id="layout">
+    <div id="sidebar">
+        <h2 style="margin-top:0">SIMBOX Pro</h2>
+        <form action="/upload" method="post" enctype="multipart/form-data" style="margin-bottom:20px;">
+            <input type="file" name="file" required>
+            <button class="btn-upload">IMPORT DATA</button>
+        </form>
+
+        <div class="stats-container">
+            <h3 style="color:var(--accent); font-size: 16px;">Grid Details</h3>
+            <p id="gridHint" style="font-size: 13px; color: #94a3b8;">Click a colored square on the map to see localized PCI and ARFCN stats.</p>
+            <div id="localStats"></div>
+        </div>
+    </div>
+
+    <div id="main">
+        <div class="tabs">
+            <div class="tab-btn active" onclick="showTab('mapTab')">Live Map</div>
+            <div class="tab-btn" onclick="showTab('chartTab')">Provider Charts</div>
+        </div>
+
+        <div id="mapTab" class="tab-content active">
+            <div id="map"></div>
+        </div>
+
+        <div id="chartTab" class="tab-content" style="padding:30px; box-sizing: border-box;">
+            <label style="font-weight:bold; margin-bottom:8px;">Filter by Session:</label>
+            <select id="sessionSelector" onchange="loadChart(this.value)" style="padding:10px; width:100%; max-width:400px; margin-bottom:20px;"></select>
+            <div style="background:white; padding:20px; border-radius:10px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
+                <canvas id="providerChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://code.jquery.com/jquery-3.7.0.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.js"></script>
+
+<script>
+    let map, chart;
+    const gridLayer = L.layerGroup();
+    const markerLayer = L.layerGroup();
+
+    function initMap() {
+        // Initialize Map
+        map = L.map('map').setView([32.09, 34.85], 19);
+        
+        // Fix overlap: Grid pane is lower than Marker pane
+        map.createPane('gridPane');
+        map.getPane('gridPane').style.zIndex = 399;
+
+        // Base Layers
+        const street = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19 // Standard detail
+        });
+
+        const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+            maxZoom: 19, // Satellite often has higher resolution
+            attribution: 'Esri'
+        });
+
+        street.addTo(map);
+        L.control.layers({"Street": street, "Satellite": satellite}).addTo(map);
+        
+        // Add Search
+        L.Control.geocoder({ defaultMarkGeocode: false })
+            .on('markgeocode', function(e) { map.fitBounds(e.geocode.bbox); })
+            .addTo(map);
+
+        gridLayer.addTo(map);
+        markerLayer.addTo(map);
+    }
+
+    function showTab(id) {
+        $('.tab-content').removeClass('active');
+        $('.tab-btn').removeClass('active');
+        $(`#${id}`).addClass('active');
+        $(event.target).addClass('active');
+        
+        // Crucial: Tell Leaflet the container changed size
+        if(id === 'mapTab') {
+            setTimeout(() => { map.invalidateSize(); }, 100);
+        }
+    }
+
+    // Adds a tiny random offset (approx 1-2 meters) to coordinates
+    function applyJitter(lat, lng) {
+        const jitterAmount = 0.00005; // Adjust this for more/less spread
+        return [
+            lat + (Math.random() - 0.5) * jitterAmount,
+            lng + (Math.random() - 0.5) * jitterAmount
+        ];
+    }
+
+    // Fetch and Load Data
+    fetch('/get_data').then(r => r.json()).then(data => {
+        if(data.error) return;
+
+        const bounds = [];
+        // 1. Modems Markers
+        data.markers.forEach(m => {
+            // 1. Apply jitter so overlapping modems are visible
+            const [jitterLat, jitterLng] = applyJitter(m.LATITUDE, m.LONGITUDE);
+
+            const marker = L.circleMarker([jitterLat, jitterLng], {
+                radius: 7, 
+                color: '#1e40af', 
+                fillColor: '#3b82f6', 
+                fillOpacity: 0.9, 
+                weight: 1
+            }).addTo(markerLayer);
+            
+            // 2. Verbose Tooltip (Shown on Hover)
+            const verboseInfo = `
+                <div style="font-family: sans-serif; line-height: 1.4;">
+                    <b style="color:#2563eb; font-size:14px;">Modem #${m.MODEM_NUMBER}</b><br/>
+                    <hr style="margin: 5px 0; border: 0; border-top: 1px solid #eee;"/>
+                    <b>Status:</b> ${m.SUCCESS_RATE.toFixed(1)}% Success<br/>
+                    <b>Operator:</b> ${m.OPERATOR} (${m.RAT})<br/>
+                    <b>Signal:</b> RSSI: ${m.RSSI} | SNR: ${m.SNR}<br/>
+                    <b>Cell ID:</b> ${m.CELL_ID} (PCI: ${m.PCI})<br/>
+                    <b>ARFCN:</b> ${m.ARFCN}<br/>
+                    <b>IMEI:</b> <span style="font-family:monospace;">${m.IMEI}</span><br/>
+                    <b>Time:</b> ${new Date(m.TIMESTAMP).toLocaleTimeString()}
+                </div>
+            `;
+
+            marker.bindTooltip(verboseInfo, {
+                sticky: true, // Tooltip follows the mouse
+                direction: 'top',
+                opacity: 0.95
+            });
+        });
+
+        // 2. Grid Squares
+        data.grid.forEach(g => {
+            const rates = Object.values(g.operators);
+            const avg = rates.reduce((a, b) => a + b, 0) / rates.length;
+            const color = avg > 80 ? '#22c55e' : (avg > 50 ? '#eab308' : '#ef4444');
+
+            const rect = L.rectangle(
+                [[g.lat - 0.001, g.lng - 0.001], [g.lat + 0.001, g.lng + 0.001]],
+                { color: color, weight: 1, fillOpacity: 0.3, pane: 'gridPane' }
+            ).addTo(gridLayer);
+
+            let tip = `<b>Area Summary</b><br>`;
+            for (let [op, rate] of Object.entries(g.operators)) {
+                tip += `${op}: ${rate}% Success<br>`;
+            }
+            rect.bindTooltip(tip);
+
+            // Handle Grid Click for Local Stats
+            rect.on('click', () => {
+                $('#gridHint').hide();
+                let html = `<h4 style="margin:15px 0 10px 0; color:var(--accent)">Area Stats</h4>`;
+                
+                html += `<b>PCI Distribution:</b>`;
+                for (let [pci, perc] of Object.entries(g.pci_dist)) {
+                    html += `<div class="local-stat-box">PCI ${pci}: <b>${perc}%</b></div>`;
+                }
+
+                html += `<b style="margin-top:10px; display:block;">ARFCN Distribution:</b>`;
+                for (let [arf, perc] of Object.entries(g.earfcn_dist)) {
+                    html += `<div class="local-stat-box">EARFCN ${arf}: <b>${perc}%</b></div>`;
+                }
+                $('#localStats').html(html);
+            });
+        });
+
+        // 3. Populate Sessions
+        const sel = document.getElementById('sessionSelector');
+        data.sessions.forEach(s => {
+            const o = document.createElement('option');
+            o.value = o.text = s;
+            sel.add(o);
+        });
+        if(data.sessions.length) loadChart(data.sessions[0]);
+    });
+
+    function loadChart(session) {
+        fetch(`/get_chart_data/${session}`).then(r => r.json()).then(data => {
+            if(chart) chart.destroy();
+            chart = new Chart(document.getElementById('providerChart'), {
+                type: 'bar',
+                data: {
+                    labels: Object.keys(data),
+                    datasets: [{ label: 'Avg Success Rate %', data: Object.values(data), backgroundColor: '#3b82f6' }]
+                },
+                options: { scales: { y: { beginAtZero: true, max: 100 } } }
+            });
+        });
+    }
+
+    initMap();
+</script>
+
+</body>
+</html>
