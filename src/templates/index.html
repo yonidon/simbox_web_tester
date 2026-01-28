@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>SIMBOX Command</title>
+    <style>
+        :root { --bg: #0f172a; --card: #1e293b; --accent: #38bdf8; --success: #22c55e; --danger: #ef4444; --text: #f1f5f9; }
+        body { font-family: 'Segoe UI', system-ui; background: var(--bg); color: var(--text); margin: 0; padding: 10px; }
+        .card { background: var(--card); border-radius: 12px; padding: 16px; margin-bottom: 12px; border: 1px solid #334155; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        
+        .stat-box { text-align: center; padding: 12px; border-radius: 8px; background: #0f172a50; border: 1px solid #ffffff10; }
+        .label { font-size: 11px; text-transform: uppercase; color: #94a3b8; margin-bottom: 4px; }
+        .value { font-size: 18px; font-weight: bold; }
+
+        .btn { border: none; border-radius: 8px; padding: 14px; font-weight: bold; width: 100%; font-size: 14px; cursor: pointer; transition: 0.2s; }
+        .btn-primary { background: var(--accent); color: #000; }
+        .btn-start { background: var(--success); color: white; }
+        .btn-stop { background: var(--danger); color: white; }
+        
+        .indicator { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        .pulse { animation: blink 1s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+        
+        input { background: #0f172a; border: 1px solid #334155; color: white; padding: 12px; border-radius: 8px; width: 100%; box-sizing: border-box; margin-bottom: 10px; }
+        h2 { margin: 0 0 15px 0; font-size: 18px; color: var(--accent); }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>Session Config</h2>
+        <input type="text" id="sessionName" placeholder="Enter session name...">
+        <button class="btn btn-primary" onclick="updateSession()">Set Session</button>
+        <button class="btn btn-primary" style="margin-top:10px; background:#475569;" onclick="window.location.href='/export_csv'">
+            EXPORT TO CSV
+        </button>
+        <div class="grid" style="margin-top: 15px;">
+            <button class="btn btn-start" onclick="startSystem()">START SURVEY</button>
+            <button class="btn btn-stop" onclick="fetch('/stop_script', {method:'POST'})">STOP SURVEY</button>
+        </div>
+    </div>
+    
+
+    <div class="card grid">
+        <div class="stat-box">
+            <div class="label">GPS Status</div>
+            <div class="value" id="gpsVal"><span class="indicator pulse" style="background:var(--danger)"></span>Searching...</div>
+        </div>
+        <div class="stat-box">
+            <div class="label">Backend Activity</div>
+            <div class="value" id="heartbeatVal">No Data</div>
+        </div>
+        <div class="stat-box">
+            <div class="label">Survey Mode</div>
+            <div class="value" id="modeVal">IDLE</div>
+        </div>
+        <div class="stat-box">
+            <div class="label">Total Events</div>
+            <div class="value" id="countVal" style="color:var(--accent)">0</div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Location Monitor</h2>
+        <div style="font-family: monospace; font-size: 13px; color: #94a3b8;">
+            Lat: <span id="lat">0.00000</span><br>
+            Lng: <span id="lng">0.00000</span><br>
+            Session: <span id="activeSession" style="color:var(--accent)">-</span>
+        </div>
+    </div>
+
+    <script>
+
+        // Start survey and force gps update
+        function startSystem() {
+            // 1. Force a fresh GPS lock immediately
+            forceGPSUpdate(); 
+            
+            // 2. Tell the backend to start
+            fetch('/start_script', { method: 'POST' });
+        }
+
+        // Function to update name of session
+        function updateSession() {
+            const val = document.getElementById('sessionName').value;
+            fetch('/set_session', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({session_name: val})
+            });
+        }
+
+        // Function force gps update from browser
+        function forceGPSUpdate() {
+            const gpsStatus = document.getElementById('gpsVal');
+            gpsStatus.innerHTML = '<span class="indicator pulse" style="background:var(--accent)"></span>Refreshing...';
+            
+            navigator.geolocation.getCurrentPosition(p => {
+                const coords = { 
+                    lat: p.coords.latitude, 
+                    lng: p.coords.longitude, 
+                    alt: p.coords.altitude || 0 
+                };
+                
+                // Update UI
+                document.getElementById('lat').innerText = coords.lat.toFixed(5);
+                document.getElementById('lng').innerText = coords.lng.toFixed(5);
+                document.getElementById('gpsVal').innerHTML = '<span class="indicator" style="background:var(--success)"></span>Locked';
+                
+                // Send to server
+                fetch('/update_gps', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(coords)
+                });
+            }, (err) => {
+                console.error("GPS Error:", err);
+                gpsStatus.innerHTML = '<span class="indicator" style="background:var(--danger)"></span>Error';
+    }, {enableHighAccuracy: true});
+}
+
+        // GPS logic
+        if ("geolocation" in navigator) {
+            navigator.geolocation.watchPosition(p => {
+                const coords = { lat: p.coords.latitude, lng: p.coords.longitude, alt: p.coords.altitude };
+                document.getElementById('lat').innerText = coords.lat.toFixed(5);
+                document.getElementById('lng').innerText = coords.lng.toFixed(5);
+                document.getElementById('gpsVal').innerHTML = '<span class="indicator" style="background:var(--success)"></span>Locked';
+                
+                fetch('/update_gps', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(coords)
+                });
+            }, null, {enableHighAccuracy: true});
+        }
+
+        // UI Polling logic
+        let lastActivity = null;
+        setInterval(() => {
+            fetch('/get_status')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('modeVal').innerText = data.survey_running ? "RUNNING" : "STOPPED";
+                    document.getElementById('modeVal').style.color = data.survey_running ? "var(--success)" : "var(--danger)";
+                    document.getElementById('countVal').innerText = data.modem_counter;
+                    document.getElementById('activeSession').innerText = data.session_name;
+                    
+                    if (data.last_activity && data.last_activity !== lastActivity) {
+                        lastActivity = data.last_activity;
+                        const hb = document.getElementById('heartbeatVal');
+                        hb.innerText = "Recv: " + lastActivity;
+                        hb.style.color = "var(--success)";
+                        // Visual flash effect
+                        hb.parentElement.style.borderColor = "var(--success)";
+                        setTimeout(() => hb.parentElement.style.borderColor = "#ffffff10", 300);
+                    }
+                });
+        }, 1000);
+    </script>
+</body>
+</html>

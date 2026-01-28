@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SIMBOX Controller</title>
+    <style>
+        body { font-family: sans-serif; background: #f4f4f9; margin: 0; padding: 15px; }
+        .card { background: white; padding: 15px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); margin-bottom: 15px; }
+        .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .status-item { padding: 10px; border-radius: 5px; text-align: center; color: white; font-weight: bold; }
+        .active { background: #27ae60; }
+        .inactive { background: #c0392b; }
+        .gps-box { background: #2980b9; }
+        .btn { width: 100%; padding: 15px; border: none; border-radius: 5px; font-size: 16px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+        .btn-start { background: #2ecc71; color: white; }
+        .btn-stop { background: #e74c3c; color: white; }
+        .btn-set { background: #34495e; color: white; }
+        input[type="text"] { width: 100%; padding: 10px; box-sizing: border-box; border: 1px solid #ccc; border-radius: 5px; margin-top: 5px; }
+        h3 { margin-top: 0; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h3>System Controls</h3>
+        <input type="text" id="sessionInput" placeholder="Enter Session Name">
+        <button class="btn btn-set" onclick="setSession()">Set Session</button>
+        <div style="display: flex; gap: 10px;">
+            <button class="btn btn-start" onclick="startSystem()">START</button>
+            <button class="btn btn-stop" onclick="stopSystem()">STOP</button>
+        </div>
+    </div>
+
+    <div class="card status-grid">
+        <div id="gpsStatus" class="status-item inactive">GPS: Off</div>
+        <div id="surveyStatus" class="status-item inactive">Survey: Off</div>
+        <div id="backendStatus" class="status-item gps-box">Polling: Active</div>
+        <div class="status-item gps-box">Modems: <span id="modemCount">0</span></div>
+    </div>
+
+    <div class="card">
+        <h3>Live Info</h3>
+        <p><strong>Session:</strong> <span id="currentSession">-</span></p>
+        <p><strong>Browser Lat:</strong> <span id="lat">0.0</span></p>
+        <p><strong>Browser Lng:</strong> <span id="lng">0.0</span></p>
+    </div>
+
+    <script>
+        let modemCount = 0;
+
+        // 1. GPS Tracking
+        if ("geolocation" in navigator) {
+            navigator.geolocation.watchPosition(pos => {
+                const data = {
+                    lat: pos.coords.latitude,
+                    lng: pos.coords.longitude,
+                    alt: pos.coords.altitude || 0,
+                    status: "Active"
+                };
+                document.getElementById('lat').innerText = data.lat.toFixed(5);
+                document.getElementById('lng').innerText = data.lng.toFixed(5);
+                document.getElementById('gpsStatus').className = "status-item active";
+                document.getElementById('gpsStatus').innerText = "GPS: Active";
+
+                fetch('/update_gps', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(data)
+                });
+            }, err => {
+                document.getElementById('gpsStatus').innerText = "GPS Error";
+            }, { enableHighAccuracy: true });
+        }
+
+        // 2. Control Functions
+        function startSystem() {
+            fetch('/start_script', { method: 'POST' });
+        }
+
+        function stopSystem() {
+            fetch('/stop_script', { method: 'POST' });
+        }
+
+        function setSession() {
+            const name = document.getElementById('sessionInput').value;
+            fetch('/set_session', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ session_name: name })
+            });
+        }
+
+        // 3. UI Sync Polling
+        setInterval(() => {
+            fetch('/get_status')
+                .then(res => res.json())
+                .then(data => {
+                    document.getElementById('currentSession').innerText = data.session_name;
+                    document.getElementById('modemCount').innerText = data.modem_counter;
+                    
+                    const sStatus = document.getElementById('surveyStatus');
+                    if(data.survey_running) {
+                        sStatus.className = "status-item active";
+                        sStatus.innerText = "Survey: ON";
+                    } else {
+                        sStatus.className = "status-item inactive";
+                        sStatus.innerText = "Survey: OFF";
+                    }
+                });
+        }, 1000);
+    </script>
+</body>
+</html>
