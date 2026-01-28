@@ -125,6 +125,7 @@ def receive_json():
     data = request.json
     if not data: return jsonify({"error": "no data"}), 400
 
+
     try:
         conn = mysql.connector.connect(**DATABASE_CONFIG)
         cursor = conn.cursor()
@@ -161,10 +162,16 @@ def receive_json():
         conn.commit()
         cursor.close()
         conn.close()
-        return jsonify({"status": "success"})
     except Exception as e:
         logging.error(f"RECEIVE_JSON ERROR: {e}")
-        return jsonify({"error": str(e)}), 500
+    
+    # --- 2. Communication Logic (Command to Backend) ---
+    if system_mode == 'stop':
+        return jsonify({"status": "stop"}), 200
+    
+    return jsonify({"status": "start"}), 200
+    
+
     
 @app.route('/export_csv', methods=['GET'])
 def export_csv():

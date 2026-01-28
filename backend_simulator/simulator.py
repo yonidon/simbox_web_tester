@@ -54,57 +54,50 @@ def generate_modem_payload(modem_number):
         }
     }
 
-def get_system_status():
-    """Polls the webserver to see if we should be in 'start' or 'stop' mode"""
-    try:
-        response = requests.get(f"{SERVER_URL}/get_status", timeout=2)
-        if response.status_code == 200:
-            return response.json()
-    except Exception as e:
-        print(f"Waiting for server... ({e})")
-    return None
-
 def run_simulator():
     print(f"Starting SIMBOX Simulator targeting {SERVER_URL}...")
-    
+    current_mode = "stop" # Default state
+
     while True:
-        status_data = get_system_status()
-        
-        if status_data:
-            mode = status_data.get("system_mode", "stop")
+        # 1. Prepare payload based on the current mode
+        if current_mode == "start":
+            num_modems = random.randint(1, 16)
+            payload = {
+                "simbox_name": "PC",
+                "psms_name": "PSMS",
+                "status": "RUNNING",
+                "gps_location": "0,0,0",
+                "survey_running": True,
+                "senders": {str(i): generate_modem_payload(i) for i in range(1, num_modems + 1)}
+            }
+            print(f"[{time.strftime('%H:%M:%S')}] Mode: START | Sending Active Data ({num_modems} modems)")
+        else:
+            payload = {
+                "simbox_name": "PC", 
+                "psms_name": "PSMS", 
+                "status": "IDLE", 
+                "senders": {}, 
+                "gps_location": "", 
+                "survey_running": False
+            }
+            print(f"[{time.strftime('%H:%M:%S')}] Mode: STOP | Sending Heartbeat")
+
+        # 2. Send payload and receive the command for the NEXT loop
+        try:
+            # We use POST for both sending data AND receiving the next instruction
+            response = requests.post(f"{SERVER_URL}/receive_json", json=payload, timeout=5)
             
-            if mode == "start":
-                # GENERATE FULL PAYLOAD
-                num_modems = random.randint(1, 16) # Simulate varying modem counts
-                payload = {
-                    "simbox_name": "PC",
-                    "psms_name": "PSMS",
-                    "status": "RUNNING",
-                    "gps_location": "0,0,0", # Server will override this anyway
-                    "survey_running": True,
-                    "senders": {str(i): generate_modem_payload(i) for i in range(1, num_modems + 1)}
-                }
-                print(f"[{time.strftime('%H:%M:%S')}] Sending ACTIVE payload ({num_modems} modems)")
+            if response.status_code == 200:
+                # Capture the "start" or "stop" status from server response
+                server_response = response.json()
+                current_mode = server_response.get("status", "stop")
             else:
-                # GENERATE IDLE PAYLOAD
-                payload = {
-                    "simbox_name": "PC", 
-                    "psms_name": "PSMS", 
-                    "status": "IDLE", 
-                    "senders": {}, 
-                    "gps_location": "", 
-                    "survey_running": False, 
-                    "battery_voltage": 8.314, 
-                    "battery_status": "Discharging"
-                }
-                print(f"[{time.strftime('%H:%M:%S')}] Sending IDLE heartbeat")
+                print(f"Server error: {response.status_code}")
+                
+        except Exception as e:
+            print(f"Connection error: {e}")
 
-            # Send to server
-            try:
-                requests.post(f"{SERVER_URL}/receive_json", json=payload, timeout=2)
-            except Exception as e:
-                print(f"Error sending data: {e}")
-
+        # 3. Wait before checking in again
         time.sleep(POLL_INTERVAL)
 
 if __name__ == "__main__":
