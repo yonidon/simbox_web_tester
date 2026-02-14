@@ -68,7 +68,8 @@
 
         <h3 style="margin-top:20px;">Fuse Phone Results</h3>
         <input type="file" id="jsonFile" accept=".json" style="margin-bottom:8px;">
-        <input type="number" id="timeOffset" placeholder="Time diff (seconds)" value="0"
+        <p style="font-size: 13px; color: #94a3b8;">Approximate time difference between phone and simbox</p>
+        <input type="number" id="timeOffset" placeholder="Time diff (seconds)" value="15"
             style="width:100%; padding:8px; margin-bottom:8px;">
         <button class="btn-upload" onclick="fuseResults()">FUSE</button>
 
@@ -81,8 +82,8 @@
 
     <div id="main">
         <div class="tabs">
-            <div class="tab-btn active" onclick="showTab('mapTab')">Live Map</div>
-            <div class="tab-btn" onclick="showTab('chartTab')">Provider Charts</div>
+            <div class="tab-btn active" onclick="showTab('mapTab')">Map</div>
+            <div class="tab-btn" onclick="showTab('chartTab')">Charts</div>
         </div>
 
         <div id="mapTab" class="tab-content active">
@@ -110,7 +111,7 @@
 
     function initMap() {
         // Initialize Map
-        map = L.map('map').setView([32.09, 34.85], 19);
+        map = L.map('map').setView([32.09, 34.85], 2);
         
         // Fix overlap: Grid pane is lower than Marker pane
         map.createPane('gridPane');
@@ -118,11 +119,14 @@
 
         // Base Layers
         const street = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19 // Standard detail
+            maxZoom: 24,          // allow deep zoom
+            maxNativeZoom: 19     // actual tile resolution
+
         });
 
         const satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-            maxZoom: 19, // Satellite often has higher resolution
+            maxZoom: 24,           // allow deep zoom
+            maxNativeZoom: 19,     // actual tile resolution
             attribution: 'Esri'
         });
 
@@ -212,7 +216,6 @@
                     <b>Signal:</b> RSSI: ${m.RSSI} | SNR: ${m.SNR}<br/>
                     <b>Cell ID:</b> ${m.CELL_ID} (PCI: ${m.PCI})<br/>
                     <b>ARFCN:</b> ${m.ARFCN}<br/>
-                    <b>PCI:</b> ${m.PCI}<br/>
                     <b>IMEI:</b> <span style="font-family:monospace;">${m.IMEI}</span><br/>
                     <b>IMSI:</b> <span style="font-family:monospace;">${m.IMSI}</span><br/>
                     <b>Time:</b> ${new Date(m.TIMESTAMP).toLocaleTimeString()}<br/>
