@@ -251,10 +251,9 @@
 
             // 2. Verbose Tooltip (Shown on Hover)
             const verboseInfo = `
-                <div style="font-family: sans-serif; line-height: 1.4;">
-                    <b style="color:#2563eb; font-size:14px;">Modem #${m.MODEM_NUMBER}</b><br/>
+                <div style="font-family: sans-serif; line-height: 1.4;font-size:20px;">
+                    <b style="color:#2563eb; font-size:20px;">Modem #${m.MODEM_NUMBER}</b><br/>
                     <hr style="margin: 5px 0; border: 0; border-top: 1px solid #eee;"/>
-                    <b>ERROR STATUS:</b> ${m.ERROR}<br/>
                     <b>Operator:</b> ${m.OPERATOR} (${m.RAT})<br/>
                     <b>Signal:</b> RSSI: ${m.RSSI} | SNR: ${m.SNR}<br/>
                     <b>Cell ID:</b> ${m.CELL_ID} (PCI: ${m.PCI})<br/>
@@ -325,7 +324,38 @@
                     labels: Object.keys(data),
                     datasets: [{ label: 'Avg Success Rate %', data: Object.values(data), backgroundColor: '#3b82f6' }]
                 },
-                options: { scales: { y: { beginAtZero: true, max: 100 } } }
+                options: {
+                    plugins: {
+                        legend: {
+                            labels: {
+                                font: {
+                                    size: 16,
+                                    weight: 'bold'
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                font: {
+                                    size: 16,
+                                    weight: 'bold'
+                                }
+                            }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                font: {
+                                    size: 14
+                                }
+                            }
+                        }
+                    }
+                }
+
             });
         });
     }
