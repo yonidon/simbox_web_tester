@@ -67,18 +67,28 @@ def get_data():
         # 1. Success rate per operator in THIS cell
         op_stats = group.groupby('OPERATOR')['SUCCESS_RATE'].mean().round(1).to_dict()
         
-        # 2. Local PCI Distribution
-        pci_dist = group.groupby('PCI').size().div(len(group)).mul(100).round(1).to_dict()
-        
-        # 3. Local EARFCN Distribution
-        earfcn_dist = group.groupby('ARFCN').size().div(len(group)).mul(100).round(1).to_dict()
+        # 2. Local EARFCN + PCI Pair Distribution
+        pair_dist = (
+            group
+            .groupby(['ARFCN', 'PCI'])
+            .size()
+            .div(len(group))
+            .mul(100)
+            .round(1)
+        )
+
+        # Convert multi-index to readable dictionary
+        pair_dist_dict = {
+            f"EARFCN {int(arfcn)} / PCI {int(pci)}": perc
+            for (arfcn, pci), perc in pair_dist.items()
+            if pd.notna(arfcn) and pd.notna(pci)
+        }
         
         grid_data.append({
             "lat": glat,
             "lng": glng,
             "operators": op_stats,
-            "pci_dist": pci_dist,
-            "earfcn_dist": earfcn_dist,
+            "pair_dist": pair_dist_dict,
             "total_samples": len(group)
         })
 

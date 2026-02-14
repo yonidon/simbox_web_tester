@@ -159,13 +159,29 @@
             // 1. Apply jitter so overlapping modems are visible
             const [jitterLat, jitterLng] = applyJitter(m.LATITUDE, m.LONGITUDE);
 
+            let markerColor;
+
+            if (m.SUCCESS_RATE === null || m.SUCCESS_RATE === undefined || m.ARFCN === null || m.ARFCN === undefined) {
+                markerColor = '#9ca3af';   // Gray (not registered / no calls)
+            } 
+            else if (m.SUCCESS_RATE >= 80) {
+                markerColor = '#22c55e';   // Green
+            } 
+            else if (m.SUCCESS_RATE >= 50) {
+                markerColor = '#eab308';   // Yellow
+            } 
+            else {
+                markerColor = '#ef4444';   // Red
+            }
+
             const marker = L.circleMarker([jitterLat, jitterLng], {
-                radius: 7, 
-                color: '#1e40af', 
-                fillColor: '#3b82f6', 
-                fillOpacity: 0.9, 
+                radius: 7,
+                color: markerColor,
+                fillColor: markerColor,
+                fillOpacity: 0.9,
                 weight: 1
             }).addTo(markerLayer);
+
 
             // --- ADD THIS CLICK EVENT ---
             marker.on('click', function(e) {
@@ -181,13 +197,17 @@
                 <div style="font-family: sans-serif; line-height: 1.4;">
                     <b style="color:#2563eb; font-size:14px;">Modem #${m.MODEM_NUMBER}</b><br/>
                     <hr style="margin: 5px 0; border: 0; border-top: 1px solid #eee;"/>
-                    <b>Status:</b> ${m.SUCCESS_RATE.toFixed(1)}% Success<br/>
+                    <b>ERROR STATUS:</b> ${m.ERROR}<br/>
                     <b>Operator:</b> ${m.OPERATOR} (${m.RAT})<br/>
                     <b>Signal:</b> RSSI: ${m.RSSI} | SNR: ${m.SNR}<br/>
                     <b>Cell ID:</b> ${m.CELL_ID} (PCI: ${m.PCI})<br/>
                     <b>ARFCN:</b> ${m.ARFCN}<br/>
+                    <b>PCI:</b> ${m.PCI}<br/>
                     <b>IMEI:</b> <span style="font-family:monospace;">${m.IMEI}</span><br/>
-                    <b>Time:</b> ${new Date(m.TIMESTAMP).toLocaleTimeString()}
+                    <b>IMSI:</b> <span style="font-family:monospace;">${m.IMSI}</span><br/>
+                    <b>Time:</b> ${new Date(m.TIMESTAMP).toLocaleTimeString()}<br/>
+                    <b>CALL RESULTS:</b> ${m.CALL_RESULT} <br/>
+                    <b>CALL SUCCESS RATE:</b> ${m.SUCCESS_RATE.toFixed(1)}% <br/>
                 </div>
             `;
 
@@ -220,14 +240,10 @@
                 $('#gridHint').hide();
                 let html = `<h4 style="margin:15px 0 10px 0; color:var(--accent)">Area Stats</h4>`;
                 
-                html += `<b>PCI Distribution:</b>`;
-                for (let [pci, perc] of Object.entries(g.pci_dist)) {
-                    html += `<div class="local-stat-box">PCI ${pci}: <b>${perc}%</b></div>`;
-                }
+                html += `<b>EARFCN / PCI Distribution:</b>`;
 
-                html += `<b style="margin-top:10px; display:block;">ARFCN Distribution:</b>`;
-                for (let [arf, perc] of Object.entries(g.earfcn_dist)) {
-                    html += `<div class="local-stat-box">EARFCN ${arf}: <b>${perc}%</b></div>`;
+                for (let [pair, perc] of Object.entries(g.pair_dist)) {
+                    html += `<div class="local-stat-box">${pair}: <b>${perc}%</b></div>`;
                 }
                 $('#localStats').html(html);
             });
