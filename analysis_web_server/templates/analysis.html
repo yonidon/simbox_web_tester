@@ -7,7 +7,7 @@
     <link rel="stylesheet" href="https://unpkg.com/leaflet-control-geocoder/dist/Control.Geocoder.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        :root { --sidebar-w: 320px; --accent: #2563eb; }
+        :root { --sidebar-w: 400px; --accent: #2563eb; }
         html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
         
         #layout { display: flex; height: 100vh; width: 100vw; }
@@ -188,24 +188,67 @@
                 markerColor = '#ef4444';   // Red
             }
 
+            const radius = 6 + (m.SUCCESS_RATE ? m.SUCCESS_RATE / 20 : 0);
+
             const marker = L.circleMarker([jitterLat, jitterLng], {
-                radius: 7,
-                color: markerColor,
+                radius: radius,
+                color: '#ffffff',
+                weight: 2,
                 fillColor: markerColor,
-                fillOpacity: 0.9,
-                weight: 1
+                fillOpacity: 0.9
             }).addTo(markerLayer);
 
 
-            // --- ADD THIS CLICK EVENT ---
+            let lastSelectedMarker = null;
+
+            // When marker is clicked, show detailed stats in the sidebar
             marker.on('click', function(e) {
-                // Zoom in to level 18 (house level) centered on the click
-                map.flyTo(e.latlng, 25, {
-                    animate: true,
-                    duration: 1.0 // seconds
-                });
+
+                if (map.getZoom() < 10) {
+                    map.flyTo(e.latlng, 18, {
+                        animate: true,
+                        duration: 1.0
+                    });
+                }
+                else {
+                    map.flyTo(e.latlng, map.getZoom(), {
+                        animate: true,
+                        duration: 1.0
+                    });
+                }
+
+                if (lastSelectedMarker) {
+                    lastSelectedMarker.setStyle({ weight: 1 });
+                }
+
+                marker.setStyle({ weight: 3 });
+                lastSelectedMarker = marker;
+
+                $('#gridHint').hide();
+
+                let html = `<h4 style="margin:15px 0 10px 0; color:var(--accent)">
+                    Modem #${m.MODEM_NUMBER}
+                </h4>`;
+
+                for (let [key, value] of Object.entries(m)) {
+
+                    // Pretty format for arrays or JSON strings
+                    if (typeof value === 'string' && value.startsWith('[')) {
+                        try {
+                            value = JSON.parse(value).join(', ');
+                        } catch(e){}
+                    }
+
+                    html += `
+                        <div class="local-stat-box">
+                            <b>${key}</b>: ${value}
+                        </div>
+                    `;
+                }
+
+                $('#localStats').html(html);
             });
-            
+
             // 2. Verbose Tooltip (Shown on Hover)
             const verboseInfo = `
                 <div style="font-family: sans-serif; line-height: 1.4;">
