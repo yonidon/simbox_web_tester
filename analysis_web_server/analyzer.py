@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import pandas as pd
 from flask import Flask, render_template, request, jsonify, redirect
 from werkzeug.utils import secure_filename
@@ -129,6 +130,99 @@ def load_file(filename):
     df_analysis = df
 
     return jsonify({"status": "loaded"})
+
+
+######### ENDPOINT FOR FUSING PHONE CALL DATA INTO SIMBOX EVENTS ##############
+@app.route('/fuse_results', methods=['POST'])
+def fuse_results():
+    global df_analysis
+
+    if df_analysis is None:
+        return jsonify({"error": "No CSV loaded"})
+
+    if 'file' not in request.files:
+        return jsonify({"error": "No JSON file provided"})
+
+    json_file = request.files['file']
+    offset = int(request.form.get('offset', 0))
+
+    try:
+        phone_results = json.load(json_file)
+    except:
+        return jsonify({"error": "Invalid JSON format"})
+
+    df = df_analysis.copy()
+
+    # Counters
+    fused_count = 0
+    no_match_count = 0
+    already_ok_count = 0
+
+    df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'])
+
+    for row in phone_results:
+        msisdn = re.sub(r'\D', '', str(row.get('msisdn')))
+
+        event_time = pd.to_datetime(row.get('EVENT_TIME')) + pd.Timedelta(seconds=offset)
+
+        df['MODEM_MSISDN'] = (
+            df['MODEM_MSISDN']
+            .astype(str)
+            .str.replace(r'\D', '', regex=True)  # remove ALL non-digits
+        )
+        candidates = df[df['MODEM_MSISDN'] == msisdn]
+
+        matched = False
+
+        for idx, sim_row in candidates.iterrows():
+            time_diff = abs((sim_row['TIMESTAMP'] - event_time).total_seconds())
+            if time_diff <= offset:
+                try:
+                    call_list = json.loads(sim_row['CALL_RESULT'])
+
+                    # Find first non-OK
+                    for i in range(len(call_list)):
+                        if str(call_list[i]).upper() != "OK":
+                            call_list[i] = "OK"
+                            df.at[idx, 'CALL_RESULT'] = json.dumps(call_list)
+                            fused_count += 1
+                            matched = True
+                            print(f"Fused MSISDN {msisdn} at index {idx} with time diff {time_diff:.1f}s. New call result array: {call_list}")
+                            break
+                    else:
+                        already_ok_count += 1
+                        matched = True
+
+                    break
+
+                except:
+                    continue
+
+        if not matched:
+            no_match_count += 1
+
+    # BACKUP ORIGINAL FILE
+    original_filename = df_analysis.attrs.get("source_file", "data.csv")
+    original_path = os.path.join(app.config['UPLOAD_FOLDER'], original_filename)
+
+    if os.path.exists(original_path):
+        backup_name = original_filename.replace(".csv", "_backup.csv")
+        backup_path = os.path.join(app.config['UPLOAD_FOLDER'], backup_name)
+        df_analysis.to_csv(backup_path, index=False)
+
+    # OVERWRITE ORIGINAL
+    df.to_csv(original_path, index=False)
+
+    df.attrs["source_file"] = original_filename
+    df_analysis = df
+
+    return jsonify({
+        "status": "done",
+        "fused": fused_count,
+        "no_match": no_match_count,
+        "already_ok": already_ok_count
+    })
+
 
 
 

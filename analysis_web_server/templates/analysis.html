@@ -66,6 +66,12 @@
         <select id="csvSelector" style="width:100%; padding:8px; margin-bottom:10px;"></select>
         <button class="btn-upload" onclick="loadSelectedFile()">LOAD SELECTED</button>
 
+        <h3 style="margin-top:20px;">Fuse Phone Results</h3>
+        <input type="file" id="jsonFile" accept=".json" style="margin-bottom:8px;">
+        <input type="number" id="timeOffset" placeholder="Time diff (seconds)" value="0"
+            style="width:100%; padding:8px; margin-bottom:8px;">
+        <button class="btn-upload" onclick="fuseResults()">FUSE</button>
+
         <div class="stats-container">
             <h3 style="color:var(--accent); font-size: 16px;">Grid Details</h3>
             <p id="gridHint" style="font-size: 13px; color: #94a3b8;">Click a colored square on the map to see localized PCI and ARFCN stats.</p>
@@ -144,7 +150,7 @@
         }
     }
 
-    // Adds a tiny random offset (approx 1-2 meters) to coordinates
+    // Adds a tiny random offset (approx 1-2 meters) to coordinates so that multiple modems in the same location don't perfectly overlap on the map
     function applyJitter(lat, lng) {
         const jitterAmount = 0.00005; // Adjust this for more/less spread
         return [
@@ -263,6 +269,7 @@
         if(data.sessions.length) loadChart(data.sessions[0]);
     });
 
+    // Load chart data for selected session
     function loadChart(session) {
         fetch(`/get_chart_data/${session}`).then(r => r.json()).then(data => {
             if(chart) chart.destroy();
@@ -295,6 +302,7 @@
                 });
             });
     }
+    // Load the selected CSV file and refresh the map
     function loadSelectedFile() {
     const filename = document.getElementById('csvSelector').value;
 
@@ -306,6 +314,42 @@
                 }
             });
     }
+
+    // Function to fuse phone call data into SIMBOX events
+    function fuseResults() {
+        const fileInput = document.getElementById('jsonFile');
+        const offset = document.getElementById('timeOffset').value || 0;
+
+        if (!fileInput.files.length) {
+            alert("Select JSON file first");
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('file', fileInput.files[0]);
+        formData.append('offset', offset);
+
+        fetch('/fuse_results', {
+            method: 'POST',
+            body: formData
+        })
+        .then(r => r.json())
+        .then(res => {
+            if (res.status === "done") {
+                alert(
+                    "Fuse Completed\n\n" +
+                    "Fused: " + res.fused + "\n" +
+                    "Already OK: " + res.already_ok + "\n" +
+                    "No Match: " + res.no_match
+                );
+                location.reload();
+            } else {
+                alert("Error: " + res.error);
+            }
+        });
+
+    }
+
 
 
 </script>
