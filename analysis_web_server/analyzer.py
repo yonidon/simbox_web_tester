@@ -6,13 +6,14 @@ from flask import Flask, render_template, request, jsonify, redirect
 from werkzeug.utils import secure_filename
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'uploads'
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+app.config['UPLOAD_FOLDER'] = 'uploads' # Folder to store uploaded CSV files
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True) # Ensure the upload folder exists
 
 # Global storage for the processed dataframe
 df_analysis = None
 
 def calculate_success_rate(call_result_str):
+    '''Calculates the percentage of "OK" results in the call_result array of a modem survey'''
     try:
         # Handle cases where it might be a string representation of a list
         results = json.loads(call_result_str)
@@ -24,10 +25,12 @@ def calculate_success_rate(call_result_str):
 
 @app.route('/')
 def index():
+    '''Renders the main analysis page where users can upload CSV files and visualize data'''
     return render_template('analysis.html')
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
+    '''Endpoint to handle CSV file uploads and trigger analysis'''
     global df_analysis
     if 'file' not in request.files: return redirect('/')
     file = request.files['file']
@@ -41,11 +44,16 @@ def upload_file():
     df = pd.read_csv(filepath)
     # Parse the call success rate
     df['SUCCESS_RATE'] = df['CALL_RESULT'].apply(calculate_success_rate)
+
+    # Store original filename in dataframe attributes for reference
+    df.attrs["source_file"] = filename 
+
     df_analysis = df
     return redirect('/')
 
 @app.route('/get_data')
 def get_data():
+    '''Endpoint to provide processed data for frontend visualization'''
     global df_analysis
     if df_analysis is None: return jsonify({"error": "No data uploaded"})
     
@@ -56,7 +64,7 @@ def get_data():
     # Map Markers
     markers = df_clean.to_dict(orient='records')
     
-    # Grid Logic (0.002 degree blocks)
+    # Grid Logic - Group data into ~20m x 20m cells and calculate operator success rates and EARFCN/PCI distributions
     grid_size = 0.0002
     df_clean['grid_lat'] = (df_clean['LATITUDE'] / grid_size).apply(lambda x: round(x) * grid_size)
     df_clean['grid_lng'] = (df_clean['LONGITUDE'] / grid_size).apply(lambda x: round(x) * grid_size)
@@ -101,6 +109,7 @@ def get_data():
 
 @app.route('/get_chart_data/<session>')
 def get_chart_data(session):
+    '''Endpoint to provide operator success rate data for a specific session (for chart visualization)'''
     global df_analysis
     filtered = df_analysis[df_analysis['SESSION_NAME'] == session]
     chart_data = filtered.groupby('OPERATOR')['SUCCESS_RATE'].mean().to_dict()
@@ -110,6 +119,7 @@ def get_chart_data(session):
 ############## ENDPOINTS FOR CHOOSING FILES FROM UPLOAD FOLDER ##############
 @app.route('/list_uploads')
 def list_uploads():
+    '''Endpoint to list all uploaded CSV files for selection in the frontend'''
     files = [
         f for f in os.listdir(app.config['UPLOAD_FOLDER'])
         if f.lower().endswith('.csv')
@@ -118,6 +128,7 @@ def list_uploads():
 
 @app.route('/load_file/<filename>')
 def load_file(filename):
+    '''Endpoint to load a selected CSV file from the uploads folder and re-process it for visualization'''
     global df_analysis
 
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
@@ -127,6 +138,7 @@ def load_file(filename):
 
     df = pd.read_csv(filepath)
     df['SUCCESS_RATE'] = df['CALL_RESULT'].apply(calculate_success_rate)
+    df.attrs["source_file"] = filename
     df_analysis = df
 
     return jsonify({"status": "loaded"})
@@ -135,6 +147,7 @@ def load_file(filename):
 ######### ENDPOINT FOR FUSING PHONE CALL DATA INTO SIMBOX EVENTS ##############
 @app.route('/fuse_results', methods=['POST'])
 def fuse_results():
+    '''Endpoint to fuse phone call results (from a JSON file) into the existing SIMBOX events dataframe based on MSISDN and timestamp proximity'''
     global df_analysis
 
     if df_analysis is None:
@@ -202,7 +215,9 @@ def fuse_results():
             no_match_count += 1
 
     # BACKUP ORIGINAL FILE
-    original_filename = df_analysis.attrs.get("source_file", "data.csv")
+    original_filename = df_analysis.attrs.get("source_file")
+    if not original_filename:
+        return jsonify({"error": "Source filename not stored"})
     original_path = os.path.join(app.config['UPLOAD_FOLDER'], original_filename)
 
     if os.path.exists(original_path):
@@ -225,6 +240,6 @@ def fuse_results():
 
 
 
-
+# Start the Flask app
 if __name__ == '__main__':
     app.run(port=9000, debug=True)
