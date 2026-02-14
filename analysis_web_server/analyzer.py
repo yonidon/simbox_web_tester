@@ -105,5 +105,32 @@ def get_chart_data(session):
     chart_data = filtered.groupby('OPERATOR')['SUCCESS_RATE'].mean().to_dict()
     return jsonify(chart_data)
 
+
+############## ENDPOINTS FOR CHOOSING FILES FROM UPLOAD FOLDER ##############
+@app.route('/list_uploads')
+def list_uploads():
+    files = [
+        f for f in os.listdir(app.config['UPLOAD_FOLDER'])
+        if f.lower().endswith('.csv')
+    ]
+    return jsonify(sorted(files))
+
+@app.route('/load_file/<filename>')
+def load_file(filename):
+    global df_analysis
+
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+
+    if not os.path.exists(filepath):
+        return jsonify({"error": "File not found"})
+
+    df = pd.read_csv(filepath)
+    df['SUCCESS_RATE'] = df['CALL_RESULT'].apply(calculate_success_rate)
+    df_analysis = df
+
+    return jsonify({"status": "loaded"})
+
+
+
 if __name__ == '__main__':
     app.run(port=9000, debug=True)

@@ -56,11 +56,15 @@
 
 <div id="layout">
     <div id="sidebar">
-        <h2 style="margin-top:0">SIMBOX Pro</h2>
+        <h2 style="margin-top:0">SIMBOX Analysis</h2>
         <form action="/upload" method="post" enctype="multipart/form-data" style="margin-bottom:20px;">
             <input type="file" name="file" required>
             <button class="btn-upload">IMPORT DATA</button>
         </form>
+
+        <h3 style="margin-top:20px;">Load Existing CSV</h3>
+        <select id="csvSelector" style="width:100%; padding:8px; margin-bottom:10px;"></select>
+        <button class="btn-upload" onclick="loadSelectedFile()">LOAD SELECTED</button>
 
         <div class="stats-container">
             <h3 style="color:var(--accent); font-size: 16px;">Grid Details</h3>
@@ -272,8 +276,38 @@
             });
         });
     }
-
+    
+    loadCsvList();
     initMap();
+
+    // Load existing CSV files into the selector
+    function loadCsvList() {
+        fetch('/list_uploads')
+            .then(r => r.json())
+            .then(files => {
+                const sel = document.getElementById('csvSelector');
+                sel.innerHTML = '';
+
+                files.forEach(f => {
+                    const opt = document.createElement('option');
+                    opt.value = opt.text = f;
+                    sel.add(opt);
+                });
+            });
+    }
+    function loadSelectedFile() {
+    const filename = document.getElementById('csvSelector').value;
+
+        fetch(`/load_file/${filename}`)
+            .then(r => r.json())
+            .then(res => {
+                if(res.status === "loaded") {
+                    location.reload();  // refresh map data
+                }
+            });
+    }
+
+
 </script>
 
 </body>
