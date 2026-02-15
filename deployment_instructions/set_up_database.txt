@@ -1,0 +1,30 @@
+sudo apt-get install mariadb-server
+
+to install offline:
+apt download mariadb-server
+apt download libpam-modules-bin
+apt download debconf libperl5.34
+apt download $(apt-rdepends mariadb-server | grep -v "^ " | grep -v "debconf-2.0" | grep -v "perlapi-5.34.0")
+
+nano /etc/mysql/my.cnf
+add this to file : 
+
+[mysqld]
+skip-networking=0
+skip-bind-address
+
+sudo systemctl restart mysql
+
+sudo  mysql -u root
+create database sgb;
+connect sgb
+CREATE USER sgb IDENTIFIED BY 'sgb';
+GRANT ALL PRIVILEGES ON `sgb`.* TO `sgb`@`%` ;
+mysql -usgb -psgb sgb
+
+if you get this error:
+Authentication plugin 'caching_sha2_password' is not supported
+
+Run this in MySQL root:
+ALTER USER 'username'@'%' IDENTIFIED WITH mysql_native_password BY 'password';
+

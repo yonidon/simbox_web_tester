@@ -1,0 +1,50 @@
+In flask.py:
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', port=8990)
+
+
+In linux:
+sudo apt update
+sudo apt install nginx
+
+offline install:
+apt download nginx
+apt download debconf
+apt download perl-base
+apt download perl
+apt download $(apt-rdepends nginx-full | grep -v "^ " | grep -v "debconf-2.0")
+
+# Create certificates
+mkdir ~/st_flask/certs
+cd ~/st_flask/certs
+openssl req -x509 -newkey rsa:4096 -keyout key.pem -out cert.pem -days 3650 -nodes
+
+
+# Edit nginx config file
+sudo nano /etc/nginx/conf.d/simbox.conf
+
+paste this:
+server {
+    listen 8999 ssl;
+    server_name _;
+
+    ssl_certificate /home/guard3/st_flask/certs/cert.pem;
+    ssl_certificate_key /home/guard3/st_flask/certs/key.pem;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    location / {
+        proxy_pass http://127.0.0.1:8990;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+
+test:
+sudo nginx -t
+sudo systemctl reload nginx
+https://192.168.50.1:8999/

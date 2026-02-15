@@ -1,0 +1,18 @@
+---
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    eno1:
+      addresses:
+        - 192.168.8.130/23
+      nameservers:
+        addresses:
+          - 8.8.8.8
+      routes:
+        - to: default
+          via: 192.168.8.130
+    wlp1s0:
+      dhcp4: no
+      addresses:
+        - 192.168.50.1/24

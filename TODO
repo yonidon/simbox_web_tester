@@ -1,4 +1,3 @@
-Synchronize time based on browser?
-Add an option to set time difference when syncing phone call results?
-Add deployment instructions
-Add offlinel libraries
+Add offline libraries
+Fix ok_busy functuin. Maybe everything that starts with suffix ok
+Fix mobile phone comparison

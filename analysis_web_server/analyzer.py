@@ -4,6 +4,8 @@ import re
 import pandas as pd
 from flask import Flask, render_template, request, jsonify, redirect
 from werkzeug.utils import secure_filename
+import phonenumbers
+from phonenumbers import PhoneNumberFormat
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads' # Folder to store uploaded CSV files
@@ -12,16 +14,53 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True) # Ensure the upload fold
 # Global storage for the processed dataframe
 df_analysis = None
 
+# Global region configuration
+# Examples:
+# "IL" → Israel
+# "US" → United States
+# "CL" → Chile
+# "DE" → Germany
+# "FR" → France
+# "GB" → United Kingdom
+REGION = "IL"
+
 def calculate_success_rate(call_result_str):
     '''Calculates the percentage of "OK" results in the call_result array of a modem survey'''
     try:
         # Handle cases where it might be a string representation of a list
         results = json.loads(call_result_str)
         if not results: return 0.0
-        success_count = sum(1 for x in results if str(x).upper() == "OK")
+        success_count = sum(
+            1 for x in results
+            if str(x).upper().startswith("OK")
+        )
         return (success_count / len(results)) * 100
     except:
         return 0.0
+    
+def normalize_msisdn(number):
+    """
+    Normalize phone number to E.164 format without '+'.
+    Returns None if invalid. Used in fuse endpoint to ensure consistent MSISDN comparison between SIMBOX events and phone call results.
+    """
+
+    if not number:
+        return None
+
+    try:
+        parsed = phonenumbers.parse(str(number), REGION)
+
+        if phonenumbers.is_valid_number(parsed):
+            return phonenumbers.format_number(
+                parsed,
+                PhoneNumberFormat.E164
+            ).replace("+", "")
+
+    except:
+        return None
+
+    return None
+
 
 @app.route('/')
 def index():
@@ -173,6 +212,9 @@ def fuse_results():
 
     df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'])
 
+    # Normalize all MSISDNs in the dataframe once for comparison
+    df['NORMALIZED_MSISDN'] = df['MODEM_MSISDN'].apply(normalize_msisdn)
+
     for row in phone_results:
         msisdn = re.sub(r'\D', '', str(row.get('msisdn')))
 
@@ -183,7 +225,12 @@ def fuse_results():
             .astype(str)
             .str.replace(r'\D', '', regex=True)  # remove ALL non-digits
         )
-        candidates = df[df['MODEM_MSISDN'] == msisdn]
+        # Normalize the target MSISDN for comparison
+        normalized_target = normalize_msisdn(row.get('msisdn'))
+
+        # Find candidates with matching normalized MSISDN
+        candidates = df[df['NORMALIZED_MSISDN'] == normalized_target]
+        print(f"MSISDN COMPARE: {msisdn} = {df['MODEM_MSISDN'].unique()} | {len(candidates)} candidates found")
 
         matched = False
 

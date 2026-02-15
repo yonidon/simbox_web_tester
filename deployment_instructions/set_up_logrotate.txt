@@ -1,0 +1,25 @@
+sudo nano /etc/logrotate.d/simbox
+
+#Add this to the file
+/var/log/st_flask.log /var/log/st_simbox.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+
+    su root root
+    create 0640 guard3 guard3
+}
+
+#I don't know what is this, maybe needs to be in file too?
+create 0640 guard3 guard3
+
+#Check that log files are created
+sudo logrotate -d /etc/logrotate.d/simbox
+sudo logrotate -f /etc/logrotate.d/simbox
+ls -lh /var/log | grep st_
+systemctl status logrotate.timer
+ls /etc/cron.daily/logrotate    

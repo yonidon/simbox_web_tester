@@ -1,0 +1,18 @@
+[Unit]
+Description=Simbox web tester service
+After=network.target
+RequiresMountsFor=/
+
+[Service]
+WorkingDirectory=/home/guard3/simbox_web_tester
+ExecStartPre=
+ExecStart=/bin/sh -c 'exec python3 ./tester_web_server/main.py >> /var/log/simbox_web_tester.log 2>&1'
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStop=/bin/kill -s QUIT $MAINPID
+KillMode=process
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
+# This service file runs simbox web tester frontend
