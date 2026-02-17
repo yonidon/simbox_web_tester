@@ -23,6 +23,19 @@
             z-index: 1001;
         }
 
+        .sidebar-divider {
+            border: none;
+            border-top: 1px solid #334155;
+            margin: 20px 0;
+            opacity: 0.6;
+        }
+
+        .sidebar-section {
+            border-left: 3px solid var(--accent);
+            padding-left: 10px;
+            margin-bottom: 20px;
+        }
+
         #main { flex: 1; display: flex; flex-direction: column; background: #f8fafc; position: relative; }
         
         .tabs { 
@@ -57,21 +70,45 @@
 <div id="layout">
     <div id="sidebar">
         <h2 style="margin-top:0">SIMBOX Analysis</h2>
-        <form action="/upload" method="post" enctype="multipart/form-data" style="margin-bottom:20px;">
-            <input type="file" name="file" required>
-            <button class="btn-upload">IMPORT DATA</button>
-        </form>
 
-        <h3 style="margin-top:20px;">Load Existing CSV</h3>
-        <select id="csvSelector" style="width:100%; padding:8px; margin-bottom:10px;"></select>
-        <button class="btn-upload" onclick="loadSelectedFile()">LOAD SELECTED</button>
+        <hr class="sidebar-divider">
+        
+        <div class="sidebar-section"> 
+            <h3 style="margin-top:20px;">Load New CSV</h3>  
+            <form action="/upload" method="post" enctype="multipart/form-data" style="margin-bottom:20px;">
+                <input type="file" name="file" required>
+                <button class="btn-upload">IMPORT DATA</button>
+            </form>
+        </div>
 
+        <div class="sidebar-section">
+            <h3 style="margin-top:20px;">Load Existing CSV</h3>
+            <select id="csvSelector" style="width:100%; padding:8px; margin-bottom:10px;"></select>
+            <button class="btn-upload" onclick="loadSelectedFile()">LOAD SELECTED</button>
+        </div>
+
+        <hr class="sidebar-divider">
+
+        <div class="sidebar-section">
         <h3 style="margin-top:20px;">Fuse Phone Results</h3>
         <input type="file" id="jsonFile" accept=".json" style="margin-bottom:8px;">
+
+        <p style="font-size: 13px; color: #94a3b8;">Region</p>
+        <select id="regionSelector" style="width:100%; padding:8px; margin-bottom:8px;">
+            <option value="IL">Israel (IL)</option>
+            <option value="US">United States (US)</option>
+            <option value="CL">Chile (CL)</option>
+            <option value="DE">Germany (DE)</option>
+            <option value="GB">United Kingdom (GB)</option>
+        </select>
+
         <p style="font-size: 13px; color: #94a3b8;">Approximate time difference between phone and simbox</p>
         <input type="number" id="timeOffset" placeholder="Time diff (seconds)" value="15"
             style="width:100%; padding:8px; margin-bottom:8px;">
         <button class="btn-upload" onclick="fuseResults()">FUSE</button>
+        </div>
+
+        <hr class="sidebar-divider">
 
         <div class="stats-container">
             <h3 style="color:var(--accent); font-size: 16px;">Grid Details</h3>
@@ -395,6 +432,7 @@
     function fuseResults() {
         const fileInput = document.getElementById('jsonFile');
         const offset = document.getElementById('timeOffset').value || 0;
+        const region = document.getElementById('regionSelector').value;
 
         if (!fileInput.files.length) {
             alert("Select JSON file first");
@@ -404,6 +442,7 @@
         const formData = new FormData();
         formData.append('file', fileInput.files[0]);
         formData.append('offset', offset);
+        formData.append('region', region);
 
         fetch('/fuse_results', {
             method: 'POST',

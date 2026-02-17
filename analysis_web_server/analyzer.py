@@ -14,16 +14,6 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True) # Ensure the upload fold
 # Global storage for the processed dataframe
 df_analysis = None
 
-# Global region configuration
-# Examples:
-# "IL" → Israel
-# "US" → United States
-# "CL" → Chile
-# "DE" → Germany
-# "FR" → France
-# "GB" → United Kingdom
-REGION = "IL"
-
 def calculate_success_rate(call_result_str):
     '''Calculates the percentage of "OK" results in the call_result array of a modem survey'''
     try:
@@ -38,17 +28,24 @@ def calculate_success_rate(call_result_str):
     except:
         return 0.0
     
-def normalize_msisdn(number):
+def normalize_msisdn(number, region):
     """
     Normalize phone number to E.164 format without '+'.
     Returns None if invalid. Used in fuse endpoint to ensure consistent MSISDN comparison between SIMBOX events and phone call results.
+    # Examples:
+    # "IL" → Israel
+    # "US" → United States
+    # "CL" → Chile
+    # "DE" → Germany
+    # "FR" → France
+    # "GB" → United Kingdom
     """
 
     if not number:
         return None
 
     try:
-        parsed = phonenumbers.parse(str(number), REGION)
+        parsed = phonenumbers.parse(str(number), region)
 
         if phonenumbers.is_valid_number(parsed):
             return phonenumbers.format_number(
@@ -197,6 +194,7 @@ def fuse_results():
 
     json_file = request.files['file']
     offset = int(request.form.get('offset', 0))
+    region = request.form.get('region', 'IL')  # Default to 'IL' if not provided
 
     try:
         phone_results = json.load(json_file)
@@ -213,7 +211,10 @@ def fuse_results():
     df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'])
 
     # Normalize all MSISDNs in the dataframe once for comparison
-    df['NORMALIZED_MSISDN'] = df['MODEM_MSISDN'].apply(normalize_msisdn)
+    print("Using Region for normalization:", region)
+    df['NORMALIZED_MSISDN'] = df['MODEM_MSISDN'].apply(
+        lambda x: normalize_msisdn(x, region)
+    )
 
     for row in phone_results:
         msisdn = re.sub(r'\D', '', str(row.get('msisdn')))
@@ -226,7 +227,7 @@ def fuse_results():
             .str.replace(r'\D', '', regex=True)  # remove ALL non-digits
         )
         # Normalize the target MSISDN for comparison
-        normalized_target = normalize_msisdn(row.get('msisdn'))
+        normalized_target = normalize_msisdn(row.get('msisdn'), region)
 
         # Find candidates with matching normalized MSISDN
         candidates = df[df['NORMALIZED_MSISDN'] == normalized_target]
