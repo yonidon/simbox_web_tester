@@ -1,3 +1,3 @@
 Add offline libraries
-Fix ok_busy functuin. Maybe everything that starts with suffix ok
-Fix mobile phone comparison
+Add filtering in map by session?
+Keep modems in calculation even if arfcn is null?

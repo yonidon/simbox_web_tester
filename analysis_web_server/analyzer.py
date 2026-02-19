@@ -273,6 +273,9 @@ def fuse_results():
         backup_path = os.path.join(app.config['UPLOAD_FOLDER'], backup_name)
         df_analysis.to_csv(backup_path, index=False)
 
+    # Recalculate success rates after fusion
+    df['SUCCESS_RATE'] = df['CALL_RESULT'].apply(calculate_success_rate)
+
     # OVERWRITE ORIGINAL
     df.to_csv(original_path, index=False)
 
