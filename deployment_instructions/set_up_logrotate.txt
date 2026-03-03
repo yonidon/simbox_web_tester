@@ -1,7 +1,7 @@
 sudo nano /etc/logrotate.d/simbox
 
 #Add this to the file
-/var/log/st_flask.log /var/log/st_simbox.log {
+/var/log/simbox_web_tester.log /var/log/st_simbox.log /var/log/analysis_web_server.log {
     daily
     rotate 14
     compress

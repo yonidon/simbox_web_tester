@@ -1,0 +1,18 @@
+[Unit]
+Description=Simbox analysis web service
+After=network.target
+RequiresMountsFor=/
+
+[Service]
+WorkingDirectory=/home/guard3/simbox_web_tester
+ExecStartPre=
+ExecStart=/bin/sh -c 'exec python3 ./analysis_web_server/analyzer.py >> /var/log/analysis_web_server.log 2>&1'
+ExecReload=/bin/kill -HUP $MAINPID
+ExecStop=/bin/kill -s QUIT $MAINPID
+KillMode=process
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+
+# This service file runs Simbox analysis web service
