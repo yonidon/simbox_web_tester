@@ -291,6 +291,27 @@ def fuse_results():
 
 
 
+# Endpoint to retrieve table data for the table tab
+@app.route('/get_table')
+def get_table():
+    global df_analysis
+
+    if df_analysis is None:
+        return jsonify([])
+
+    df = df_analysis.copy().replace({float('nan'): None})
+
+    # optional search
+    search = request.args.get('search', '').lower()
+
+    if search:
+        df = df[df.astype(str).apply(
+            lambda row: row.str.lower().str.contains(search).any(),
+            axis=1
+        )]
+
+    return jsonify(df.to_dict(orient='records'))
+
 # Start the Flask app
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=9000, debug=True)

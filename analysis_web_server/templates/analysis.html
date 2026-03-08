@@ -49,6 +49,16 @@
             flex-shrink: 0;
         }
 
+        #dbTable th {
+        background: #f1f5f9;
+        position: sticky;
+        top: 0;
+        }
+
+        #dbTable td, #dbTable th {
+            white-space: nowrap;
+        }
+
         .tab-btn { padding: 10px 20px; cursor: pointer; border-radius: 6px; font-weight: 600; color: #64748b; border: 1px solid transparent; }
         .tab-btn.active { background: #eff6ff; color: var(--accent); border-color: #dbeafe; }
         
@@ -121,6 +131,7 @@
         <div class="tabs">
             <div class="tab-btn active" onclick="showTab('mapTab')">Map</div>
             <div class="tab-btn" onclick="showTab('chartTab')">Charts</div>
+            <div class="tab-btn" onclick="showTab('tableTab')">Database</div>
         </div>
 
         <div id="mapTab" class="tab-content active">
@@ -133,6 +144,25 @@
             <div style="background:white; padding:20px; border-radius:10px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);">
                 <canvas id="providerChart"></canvas>
             </div>
+        </div>
+
+        <div id="tableTab" class="tab-content" style="padding:20px;">
+
+            <input
+                type="text"
+                id="tableSearch"
+                placeholder="Search..."
+                style="padding:8px; width:300px; margin-bottom:10px;"
+                oninput="loadTable()"
+            >
+
+            <div style="overflow-x:auto; border:1px solid #e2e8f0;">
+                <table id="dbTable" style="border-collapse:collapse; min-width:1500px;">
+                    <thead></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+
         </div>
     </div>
 </div>
@@ -188,6 +218,10 @@
         // Crucial: Tell Leaflet the container changed size
         if(id === 'mapTab') {
             setTimeout(() => { map.invalidateSize(); }, 100);
+        }
+
+        if(id === 'tableTab') {
+        loadTable();
         }
     }
 
@@ -394,6 +428,57 @@
                 }
 
             });
+        });
+    }
+
+    function loadTable() {
+
+        const search = document.getElementById('tableSearch').value;
+
+        fetch(`/get_table?search=${encodeURIComponent(search)}`)
+        .then(r => r.json())
+        .then(rows => {
+
+            const table = document.getElementById('dbTable');
+            const thead = table.querySelector('thead');
+            const tbody = table.querySelector('tbody');
+
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+
+            if (!rows.length) return;
+
+            // headers
+            const headers = Object.keys(rows[0]);
+            const headRow = document.createElement('tr');
+
+            headers.forEach(h => {
+                const th = document.createElement('th');
+                th.innerText = h;
+                th.style.border = "1px solid #ccc";
+                th.style.padding = "6px";
+                headRow.appendChild(th);
+            });
+
+            thead.appendChild(headRow);
+
+            // rows
+            rows.forEach(r => {
+
+                const tr = document.createElement('tr');
+
+                headers.forEach(h => {
+                    const td = document.createElement('td');
+                    td.innerText = r[h];
+                    td.style.border = "1px solid #ddd";
+                    td.style.padding = "6px";
+                    tr.appendChild(td);
+                });
+
+                tbody.appendChild(tr);
+
+            });
+
         });
     }
     
