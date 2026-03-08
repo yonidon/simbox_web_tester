@@ -72,6 +72,15 @@
             EXPORT TO CSV
         </button>
     </div>
+    <div class="card">
+        <h2>Database Cleanup</h2>
+
+        <input type="date" id="cleanupDate">
+
+        <button class="btn btn-stop" onclick="cleanupDB()">
+            DELETE EVENTS BEFORE DATE
+        </button>
+    </div>
 
     <script>
 
@@ -91,6 +100,31 @@
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({session_name: val})
+            });
+        }
+
+        // Function to cleanup database
+        function cleanupDB() {
+
+            const date = document.getElementById("cleanupDate").value;
+
+            if (!date) {
+                alert("Please select a date first");
+                return;
+            }
+
+            if (!confirm("Delete all records before " + date + " ?")) {
+                return;
+            }
+
+            fetch("/cleanup_db", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({date: date})
+            })
+            .then(r => r.json())
+            .then(data => {
+                alert(data.message);
             });
         }
 
@@ -120,8 +154,10 @@
             }, (err) => {
                 console.error("GPS Error:", err);
                 gpsStatus.innerHTML = '<span class="indicator" style="background:var(--danger)"></span>Error';
-    }, {enableHighAccuracy: true});
-}
+            }, {enableHighAccuracy: true});
+        }
+
+
 
         // GPS logic
         if ("geolocation" in navigator) {
@@ -138,6 +174,8 @@
                 });
             }, null, {enableHighAccuracy: true});
         }
+
+
 
         // UI Polling logic
         let lastActivity = null;
@@ -161,6 +199,15 @@
                     }
                 });
         }, 1000);
+
+        // Get last month for the cleanup date
+        window.addEventListener("load", () => {
+            const d = new Date();
+            d.setMonth(d.getMonth() - 1);
+
+            const iso = d.toISOString().split('T')[0];
+            document.getElementById("cleanupDate").value = iso;
+        });
     </script>
 </body>
 </html>

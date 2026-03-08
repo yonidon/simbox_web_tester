@@ -202,6 +202,35 @@ def export_csv():
         return response
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+# Cleanup DB
+@app.route('/cleanup_db', methods=['POST'])
+def cleanup_db():
+    try:
+        data = request.json
+        date = data.get("date")
+
+        conn = mysql.connector.connect(**DATABASE_CONFIG)
+        cursor = conn.cursor()
+
+        query = """
+        DELETE FROM TBL_ST_SIMBOX_EVENTS
+        WHERE TIMESTAMP < %s
+        """
+
+        cursor.execute(query, (date,))
+        deleted = cursor.rowcount
+
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+        return jsonify({
+            "message": f"{deleted} records deleted before {date}"
+        })
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':
     init_db()
