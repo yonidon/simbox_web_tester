@@ -92,10 +92,17 @@ def get_data():
     '''Endpoint to provide processed data for frontend visualization'''
     global df_analysis
     if df_analysis is None: return jsonify({"error": "No data uploaded"})
+
+    # Get session from query params (default to None)
+    session_filter = request.args.get('session')
     
     # Handle NaN and clean data
     df_clean = df_analysis.replace({float('nan'): None})
     df_clean['SUCCESS_RATE'] = df_clean['CALL_RESULT'].apply(calculate_success_rate)
+
+    # Apply filter if session_filter is not "All Sessions" or empty
+    if session_filter and session_filter != "All Sessions":
+        df_clean = df_clean[df_clean['SESSION_NAME'] == session_filter]
     
     # Map Markers
     markers = df_clean.to_dict(orient='records')

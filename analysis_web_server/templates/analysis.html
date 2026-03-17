@@ -81,6 +81,14 @@
     <div id="sidebar">
         <h2 style="margin-top:0">SIMBOX Analysis</h2>
 
+        <div class="sidebar-section">
+            <h3 style="margin-top:20px;">Map Filter</h3>
+            <p style="font-size: 13px; color: #94a3b8;">Filter Map by Session</p>
+            <select id="mapSessionSelector" onchange="loadMapData(this.value)" style="width:100%; padding:8px;">
+                <option value="All Sessions">All Sessions</option>
+            </select>
+        </div>
+
         <hr class="sidebar-divider">
         
         <div class="sidebar-section"> 
@@ -239,157 +247,10 @@
         ];
     }
 
-    // Fetch and Load Data
+    // Fetch and Load Data. Need to delete this?
     fetch('/get_data').then(r => r.json()).then(data => {
         if(data.error) return;
-
-        const bounds = [];
-        // 1. Modems Markers
-        data.markers.forEach(m => {
-            // 1. Apply jitter so overlapping modems are visible
-            const [jitterLat, jitterLng] = applyJitter(m.LATITUDE, m.LONGITUDE);
-
-            let markerColor;
-
-            if (m.SUCCESS_RATE === null || m.SUCCESS_RATE === undefined || m.ARFCN === null || m.ARFCN === undefined) {
-                markerColor = '#9ca3af';   // Gray (not registered / no calls)
-            } 
-            else if (m.SUCCESS_RATE >= 80) {
-                markerColor = '#22c55e';   // Green
-            } 
-            else if (m.SUCCESS_RATE >= 50) {
-                markerColor = '#eab308';   // Yellow
-            } 
-            else {
-                markerColor = '#ef4444';   // Red
-            }
-
-            const radius = 6 + (m.SUCCESS_RATE ? m.SUCCESS_RATE / 20 : 0);
-
-            const marker = L.circleMarker([jitterLat, jitterLng], {
-                radius: radius,
-                color: '#ffffff',
-                weight: 2,
-                fillColor: markerColor,
-                fillOpacity: 0.9
-            }).addTo(markerLayer);
-
-
-            let lastSelectedMarker = null;
-
-            // When marker is clicked, show detailed stats in the sidebar
-            marker.on('click', function(e) {
-
-                if (map.getZoom() < 10) {
-                    map.flyTo(e.latlng, 18, {
-                        animate: true,
-                        duration: 1.0
-                    });
-                }
-                else {
-                    map.flyTo(e.latlng, map.getZoom(), {
-                        animate: true,
-                        duration: 1.0
-                    });
-                }
-
-                if (lastSelectedMarker) {
-                    lastSelectedMarker.setStyle({ weight: 1 });
-                }
-
-                marker.setStyle({ weight: 3 });
-                lastSelectedMarker = marker;
-
-                $('#gridHint').hide();
-
-                let html = `<h4 style="margin:15px 0 10px 0; color:var(--accent)">
-                    Modem #${m.MODEM_NUMBER}
-                </h4>`;
-
-                for (let [key, value] of Object.entries(m)) {
-
-                    // Pretty format for arrays or JSON strings
-                    if (typeof value === 'string' && value.startsWith('[')) {
-                        try {
-                            value = JSON.parse(value).join(', ');
-                        } catch(e){}
-                    }
-
-                    html += `
-                        <div class="local-stat-box">
-                            <b>${key}</b>: ${value}
-                        </div>
-                    `;
-                }
-
-                $('#localStats').html(html);
-            });
-
-            // 2. Verbose Tooltip (Shown on Hover)
-            const verboseInfo = `
-                <div style="font-family: sans-serif; line-height: 1.4;font-size:20px;">
-                    <b style="color:#2563eb; font-size:20px;">Modem #${m.MODEM_NUMBER}</b><br/>
-                    <hr style="margin: 5px 0; border: 0; border-top: 1px solid #eee;"/>
-                    <b>Operator:</b> ${m.OPERATOR} (${m.RAT})<br/>
-                    <b>Signal:</b> RSSI: ${m.RSSI} | SNR: ${m.SNR}<br/>
-                    <b>Cell ID:</b> ${m.CELL_ID} (PCI: ${m.PCI})<br/>
-                    <b>ARFCN:</b> ${m.ARFCN}<br/>
-                    <b>IMEI:</b> <span style="font-family:monospace;">${m.IMEI}</span><br/>
-                    <b>IMSI:</b> <span style="font-family:monospace;">${m.IMSI}</span><br/>
-                    <b>Time:</b> ${new Date(m.TIMESTAMP).toLocaleTimeString()}<br/>
-                    <b>Date:</b> ${new Date(m.TIMESTAMP).toLocaleDateString()}<br/>
-                    <b>Call Results:</b> ${m.CALL_RESULT} <br/>
-                    <b>Call Success rate:</b> ${m.SUCCESS_RATE.toFixed(1)}% <br/>
-                    <b>Session:</b> ${m.SESSION_NAME}<br/>
-                </div>
-            `;
-
-            marker.bindTooltip(verboseInfo, {
-                sticky: true, // Tooltip follows the mouse
-                direction: 'top',
-                opacity: 0.95
-            });
-        });
-
-        // 2. Grid Squares
-        data.grid.forEach(g => {
-            const rates = Object.values(g.operators);
-            const avg = rates.reduce((a, b) => a + b, 0) / rates.length;
-            const color = avg > 80 ? '#22c55e' : (avg > 50 ? '#eab308' : '#ef4444');
-
-            const rect = L.rectangle(
-                [[g.lat - 0.0001, g.lng - 0.0001], [g.lat + 0.0001, g.lng + 0.0001]],
-                { color: color, weight: 1, fillOpacity: 0.3, pane: 'gridPane' }
-            ).addTo(gridLayer);
-
-            let tip = `<b>Area Summary</b><br>`;
-            for (let [op, rate] of Object.entries(g.operators)) {
-                tip += `${op}: ${rate}% Success<br>`;
-            }
-            rect.bindTooltip(tip);
-
-            // Handle Grid Click for Local Stats
-            rect.on('click', () => {
-                $('#gridHint').hide();
-                let html = `<h4 style="margin:15px 0 10px 0; color:var(--accent)">Area Stats</h4>`;
-                
-                html += `<b>EARFCN / PCI Distribution:</b>`;
-
-                for (let [pair, perc] of Object.entries(g.pair_dist)) {
-                    html += `<div class="local-stat-box">${pair}: <b>${perc}%</b></div>`;
-                }
-                $('#localStats').html(html);
-            });
-        });
-
-        // 3. Populate Sessions
-        const sel = document.getElementById('sessionSelector');
-        data.sessions.forEach(s => {
-            const o = document.createElement('option');
-            o.value = o.text = s;
-            sel.add(o);
-        });
-        if(data.sessions.length) loadChart(data.sessions[0]);
+        const bounds = []; 
     });
 
     // Load chart data for selected session
@@ -491,6 +352,178 @@
     
     loadCsvList();
     initMap();
+    loadMapData(); // Initial load
+
+
+    // Load map data - markers , grids and everything
+    function loadMapData(session = "All Sessions") {
+        // Clear existing map layers before loading new ones
+        gridLayer.clearLayers();
+        markerLayer.clearLayers();
+
+        fetch(`/get_data?session=${encodeURIComponent(session)}`)
+            .then(r => r.json())
+            .then(data => {
+                if(data.error) return;
+
+                // 1. Populate the Map Filter Dropdown (only once or update if needed)
+                const mapSel = document.getElementById('mapSessionSelector');
+                if (mapSel.options.length <= 1) { // Only populate if empty (except "All Sessions")
+                    data.sessions.forEach(s => {
+                        const o = document.createElement('option');
+                        o.value = o.text = s;
+                        mapSel.add(o);
+                    });
+                }
+
+                // 1. Modems Markers
+                data.markers.forEach(m => {
+                // 1. Apply jitter so overlapping modems are visible
+                const [jitterLat, jitterLng] = applyJitter(m.LATITUDE, m.LONGITUDE);
+
+                let markerColor;
+
+                if (m.SUCCESS_RATE === null || m.SUCCESS_RATE === undefined || m.ARFCN === null || m.ARFCN === undefined) {
+                    markerColor = '#9ca3af';   // Gray (not registered / no calls)
+                } 
+                else if (m.SUCCESS_RATE >= 80) {
+                    markerColor = '#22c55e';   // Green
+                } 
+                else if (m.SUCCESS_RATE >= 50) {
+                    markerColor = '#eab308';   // Yellow
+                } 
+                else {
+                    markerColor = '#ef4444';   // Red
+                }
+
+                const radius = 6 + (m.SUCCESS_RATE ? m.SUCCESS_RATE / 20 : 0);
+
+                const marker = L.circleMarker([jitterLat, jitterLng], {
+                    radius: radius,
+                    color: '#ffffff',
+                    weight: 2,
+                    fillColor: markerColor,
+                    fillOpacity: 0.9
+                }).addTo(markerLayer);
+
+
+                let lastSelectedMarker = null;
+
+                // When marker is clicked, show detailed stats in the sidebar
+                marker.on('click', function(e) {
+
+                    if (map.getZoom() < 10) {
+                        map.flyTo(e.latlng, 18, {
+                            animate: true,
+                            duration: 1.0
+                        });
+                    }
+                    else {
+                        map.flyTo(e.latlng, map.getZoom(), {
+                            animate: true,
+                            duration: 1.0
+                        });
+                    }
+
+                    if (lastSelectedMarker) {
+                        lastSelectedMarker.setStyle({ weight: 1 });
+                    }
+
+                    marker.setStyle({ weight: 3 });
+                    lastSelectedMarker = marker;
+
+                    $('#gridHint').hide();
+
+                    let html = `<h4 style="margin:15px 0 10px 0; color:var(--accent)">
+                        Modem #${m.MODEM_NUMBER}
+                    </h4>`;
+
+                    for (let [key, value] of Object.entries(m)) {
+
+                        // Pretty format for arrays or JSON strings
+                        if (typeof value === 'string' && value.startsWith('[')) {
+                            try {
+                                value = JSON.parse(value).join(', ');
+                            } catch(e){}
+                        }
+
+                        html += `
+                            <div class="local-stat-box">
+                                <b>${key}</b>: ${value}
+                            </div>
+                        `;
+                    }
+
+                    $('#localStats').html(html);
+                });
+
+                // 2. Verbose Tooltip (Shown on Hover)
+                const verboseInfo = `
+                    <div style="font-family: sans-serif; line-height: 1.4;font-size:20px;">
+                        <b style="color:#2563eb; font-size:20px;">Modem #${m.MODEM_NUMBER}</b><br/>
+                        <hr style="margin: 5px 0; border: 0; border-top: 1px solid #eee;"/>
+                        <b>Operator:</b> ${m.OPERATOR} (${m.RAT})<br/>
+                        <b>Signal:</b> RSSI: ${m.RSSI} | SNR: ${m.SNR}<br/>
+                        <b>Cell ID:</b> ${m.CELL_ID} (PCI: ${m.PCI})<br/>
+                        <b>ARFCN:</b> ${m.ARFCN}<br/>
+                        <b>IMEI:</b> <span style="font-family:monospace;">${m.IMEI}</span><br/>
+                        <b>IMSI:</b> <span style="font-family:monospace;">${m.IMSI}</span><br/>
+                        <b>Time:</b> ${new Date(m.TIMESTAMP).toLocaleTimeString()}<br/>
+                        <b>Date:</b> ${new Date(m.TIMESTAMP).toLocaleDateString()}<br/>
+                        <b>Call Results:</b> ${m.CALL_RESULT} <br/>
+                        <b>Call Success rate:</b> ${m.SUCCESS_RATE.toFixed(1)}% <br/>
+                        <b>Session:</b> ${m.SESSION_NAME}<br/>
+                    </div>
+                `;
+
+                marker.bindTooltip(verboseInfo, {
+                    sticky: true, // Tooltip follows the mouse
+                    direction: 'top',
+                    opacity: 0.95
+                });
+            });
+
+            // 2. Grid Squares
+            data.grid.forEach(g => {
+                const rates = Object.values(g.operators);
+                const avg = rates.reduce((a, b) => a + b, 0) / rates.length;
+                const color = avg > 80 ? '#22c55e' : (avg > 50 ? '#eab308' : '#ef4444');
+
+                const rect = L.rectangle(
+                    [[g.lat - 0.0001, g.lng - 0.0001], [g.lat + 0.0001, g.lng + 0.0001]],
+                    { color: color, weight: 1, fillOpacity: 0.3, pane: 'gridPane' }
+                ).addTo(gridLayer);
+
+                let tip = `<b>Area Summary</b><br>`;
+                for (let [op, rate] of Object.entries(g.operators)) {
+                    tip += `${op}: ${rate}% Success<br>`;
+                }
+                rect.bindTooltip(tip);
+
+                // Handle Grid Click for Local Stats
+                rect.on('click', () => {
+                    $('#gridHint').hide();
+                    let html = `<h4 style="margin:15px 0 10px 0; color:var(--accent)">Area Stats</h4>`;
+                    
+                    html += `<b>EARFCN / PCI Distribution:</b>`;
+
+                    for (let [pair, perc] of Object.entries(g.pair_dist)) {
+                        html += `<div class="local-stat-box">${pair}: <b>${perc}%</b></div>`;
+                    }
+                    $('#localStats').html(html);
+                });
+            });
+
+            // 3. Populate Sessions
+            const sel = document.getElementById('sessionSelector');
+            data.sessions.forEach(s => {
+                const o = document.createElement('option');
+                o.value = o.text = s;
+                sel.add(o);
+            });
+            if(data.sessions.length) loadChart(data.sessions[0]);
+            });
+    }
 
     // Load existing CSV files into the selector
     function loadCsvList() {
