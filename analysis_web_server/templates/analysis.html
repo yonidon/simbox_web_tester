@@ -221,7 +221,7 @@
 
     // Adds a tiny random offset (approx 1-2 meters) to coordinates so that multiple modems in the same location don't perfectly overlap on the map
     function applyJitter(lat, lng) {
-        const jitterAmount = 0.00005; // Adjust this for more/less spread
+        const jitterAmount = 0.000005; // Adjust this for more/less spread
         return [
             lat + (Math.random() - 0.5) * jitterAmount,
             lng + (Math.random() - 0.5) * jitterAmount
@@ -326,8 +326,10 @@
                     <b>IMEI:</b> <span style="font-family:monospace;">${m.IMEI}</span><br/>
                     <b>IMSI:</b> <span style="font-family:monospace;">${m.IMSI}</span><br/>
                     <b>Time:</b> ${new Date(m.TIMESTAMP).toLocaleTimeString()}<br/>
-                    <b>CALL RESULTS:</b> ${m.CALL_RESULT} <br/>
-                    <b>CALL SUCCESS RATE:</b> ${m.SUCCESS_RATE.toFixed(1)}% <br/>
+                    <b>Date:</b> ${new Date(m.TIMESTAMP).toLocaleDateString()}<br/>
+                    <b>Call Results:</b> ${m.CALL_RESULT} <br/>
+                    <b>Call Success rate:</b> ${m.SUCCESS_RATE.toFixed(1)}% <br/>
+                    <b>Session:</b> ${m.SESSION_NAME}<br/>
                 </div>
             `;
 
