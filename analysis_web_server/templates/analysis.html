@@ -12,15 +12,20 @@
         
         #layout { display: flex; height: 100vh; width: 100vw; }
         
-        #sidebar { 
-            width: var(--sidebar-w); 
+        #sidebar {
+            width: var(--sidebar-w);
             background: #1e293b; 
-            color: white; 
-            padding: 20px; 
-            display: flex; 
-            flex-direction: column; 
+            color: white;  
             box-sizing: border-box;
+            max-height: calc(160vh - 120px); /* Adjust the height as needed */
+            overflow-y: auto;
+
             z-index: 1001;
+        }
+
+        /* Add margin-bottom to the last section in the sidebar */
+        .sidebar-section:last-child {
+            margin-bottom: 20px; /* Adjust the margin as needed */
         }
 
         .sidebar-divider {
@@ -169,6 +174,12 @@
     let map, chart;
     const gridLayer = L.layerGroup();
     const markerLayer = L.layerGroup();
+
+    // Function to collapse/expand side bar
+    function toggleSection(id) {
+        const el = document.getElementById(id);
+        el.style.display = (el.style.display === "none") ? "block" : "none";
+    }
 
     function initMap() {
         // Initialize Map
