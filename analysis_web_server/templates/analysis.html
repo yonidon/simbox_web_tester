@@ -59,6 +59,14 @@
             white-space: nowrap;
         }
 
+        #dbTable thead th {
+            position: sticky;
+            top: 0;
+            background-color: #f1f5f9; /* Light gray header */
+            z-index: 10;
+            border-bottom: 2px solid #cbd5e1;
+        }
+
         .tab-btn { padding: 10px 20px; cursor: pointer; border-radius: 6px; font-weight: 600; color: #64748b; border: 1px solid transparent; }
         .tab-btn.active { background: #eff6ff; color: var(--accent); border-color: #dbeafe; }
         
@@ -154,7 +162,7 @@
             </div>
         </div>
 
-        <div id="tableTab" class="tab-content" style="padding:20px; overflow:auto;">
+        <div id="tableTab" class="tab-content" style="padding:20px; box-sizing: border-box; width: 100%; overflow: hidden;">
             <input
                 type="text"
                 id="tableSearch"
@@ -163,13 +171,12 @@
                 oninput="loadTable()"
             >
 
-            <div style="width:100%; overflow-x:auto;">
-                <table id="dbTable" style="border-collapse:collapse; min-width:2000px;">
+            <div style="width: 100%; overflow-x: auto; border: 1px solid #e2e8f0;">
+                <table id="dbTable" style="border-collapse:collapse; min-width: 2000px; background: white;">
                     <thead></thead>
                     <tbody></tbody>
                 </table>
             </div>
-
         </div>
     </div>
 </div>
