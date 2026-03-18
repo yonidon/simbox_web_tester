@@ -157,6 +157,7 @@
             <div class="tab-btn active" onclick="showTab('mapTab')">Map</div>
             <div class="tab-btn" onclick="showTab('chartTab')">Charts</div>
             <div class="tab-btn" onclick="showTab('tableTab')">Database</div>
+            <div class="tab-btn" onclick="showTab('modemsTab')">Modems</div>
         </div>
 
         <div id="mapTab" class="tab-content active">
@@ -187,6 +188,16 @@
                 </table>
             </div>
         </div>
+
+        <div id="modemsTab" class="tab-content" style="padding:20px; overflow:auto;">
+            <div id="modemsContainer" style="
+                display:grid;
+                grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+                gap:15px;
+            "></div>
+        </div>
+
+        
     </div>
 </div>
 
@@ -251,6 +262,10 @@
 
         if(id === 'tableTab') {
         loadTable();
+        }
+
+        if(id === 'modemsTab') {
+            loadModems();
         }
     }
 
@@ -364,6 +379,61 @@
             });
 
         });
+    }
+
+        function loadModems() {
+
+        fetch('/get_modems')
+            .then(r => r.json())
+            .then(modems => {
+
+                const container = document.getElementById('modemsContainer');
+                container.innerHTML = '';
+                modems.sort((a, b) => a.MODEM_NUMBER - b.MODEM_NUMBER);
+                modems.forEach(m => {
+
+                    let color = '#ef4444';
+                    if (m.SUCCESS_RATE >= 80) color = '#22c55e';
+                    else if (m.SUCCESS_RATE >= 50) color = '#eab308';
+
+                    let html = `
+                        <div style="
+                            background:white;
+                            border-radius:10px;
+                            padding:15px;
+                            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                            border-left: 5px solid ${color};
+                            font-size:13px;
+                        ">
+                            <h3 style="margin-top:0; color:#2563eb;">
+                                Modem #${m.MODEM_NUMBER}
+                            </h3>
+                    `;
+
+                    for (let [key, value] of Object.entries(m)) {
+
+                        // Pretty JSON arrays
+                        if (typeof value === 'string' && value.startsWith('[')) {
+                            try {
+                                value = JSON.parse(value).join(', ');
+                            } catch(e){}
+                        }
+
+                        html += `
+                            <div style="
+                                padding:4px 0;
+                                border-bottom:1px solid #eee;
+                            ">
+                                <b>${key}</b>: ${value}
+                            </div>
+                        `;
+                    }
+
+                    html += `</div>`;
+
+                    container.innerHTML += html;
+                });
+            });
     }
     
     loadCsvList();

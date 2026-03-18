@@ -159,6 +159,31 @@ def get_chart_data(session):
     return jsonify(chart_data)
 
 
+@app.route('/get_modems')
+def get_modems():
+    global df_analysis
+
+    if df_analysis is None:
+        return jsonify([])
+
+    df = df_analysis.copy()
+
+    # Ensure timestamp is datetime
+    df['TIMESTAMP'] = pd.to_datetime(df['TIMESTAMP'])
+
+    # Get latest row per modem
+    latest = (
+        df.sort_values('TIMESTAMP')
+          .groupby('MODEM_NUMBER', as_index=False)
+          .last()
+    )
+
+    # Clean NaN
+    latest = latest.replace({float('nan'): None})
+
+    return jsonify(latest.to_dict(orient='records'))
+
+
 ############## ENDPOINTS FOR CHOOSING FILES FROM UPLOAD FOLDER ##############
 @app.route('/list_uploads')
 def list_uploads():
