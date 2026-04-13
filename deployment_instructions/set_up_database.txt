@@ -6,6 +6,9 @@ apt download libpam-modules-bin
 apt download debconf libperl5.34
 apt download $(apt-rdepends mariadb-server | grep -v "^ " | grep -v "debconf-2.0" | grep -v "perlapi-5.34.0")
 
+Online install:
+sudo apt-get install mariadb-server
+
 nano /etc/mysql/my.cnf
 add this to file : 
 
@@ -25,6 +28,10 @@ mysql -usgb -psgb sgb
 if you get this error:
 Authentication plugin 'caching_sha2_password' is not supported
 
-Run this in MySQL root:
+Run this in MySQL root (mysql -u root):
 ALTER USER 'username'@'%' IDENTIFIED WITH mysql_native_password BY 'password';
+
+
+In python install:
+sudo pip3 install mysql-connector-python
 
