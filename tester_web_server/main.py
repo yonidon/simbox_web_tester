@@ -25,6 +25,7 @@ session_name = "Default_Session"
 modem_counter = 0
 current_gps = {"lat": 0, "lng": 0, "alt": 0}
 last_backend_activity = None # Tracks last time JSON was received
+latest_modems = {}  # modem_number is latest modem status snapshot
 
 def init_db():
     try:
@@ -134,6 +135,21 @@ def receive_json():
         for m_num, m_val in senders.items():
             modem_counter += 1
             survey = m_val.get('survey_results', {})
+
+            # Keep latest live status per modem (for GUI)
+            latest_modems[str(m_num)] = {
+                "modem_number": int(m_num),
+                "status": m_val.get("status"),
+                "error": m_val.get("error"),
+                "network": m_val.get("network"),
+                "msisdn": m_val.get("msisdn"),
+                "operator": survey.get("operator"),
+                "rat": survey.get("rat"),
+                "rssi": survey.get("rssi"),
+                "snr": survey.get("snr"),
+                "registration_status": survey.get("registration_status"),
+                "last_seen": datetime.now().strftime("%H:%M:%S")
+            }
             
             # Use data from payload, but use browser coordinates for DB
             cursor.execute('''
@@ -231,6 +247,16 @@ def cleanup_db():
 
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+    
+
+@app.route('/get_modems', methods=['GET'])
+def get_modems():
+    ''' Modem data for gui modems tab'''
+    modems = sorted(latest_modems.values(), key=lambda x: x["modem_number"])
+    return jsonify({
+        "count": len(modems),
+        "modems": modems
+    })
 
 if __name__ == '__main__':
     init_db()

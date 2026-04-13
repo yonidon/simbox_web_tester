@@ -68,6 +68,11 @@
     </div>
 
     <div class="card">
+        <h2>Modems</h2>
+        <div id="modemsContainer">No modem data yet.</div>
+    </div>
+
+    <div class="card">
         <button class="btn btn-primary" style="margin-top:10px; background:#475569;" onclick="window.location.href='/export_csv'">
             EXPORT TO CSV
         </button>
@@ -102,6 +107,42 @@
                 body: JSON.stringify({session_name: val})
             });
         }
+
+        // Get modems for modems card
+        function renderModems(modems) {
+            const container = document.getElementById('modemsContainer');
+
+            // 1) Save currently open modem numbers
+            const openSet = new Set(
+                Array.from(container.querySelectorAll('details[open]'))
+                    .map(d => d.dataset.modem)
+            );
+
+            if (!modems || modems.length === 0) {
+                container.innerHTML = "No modem data yet.";
+                return;
+            }
+
+            // 2) Rebuild HTML
+            container.innerHTML = modems.map(m => `
+                <details data-modem="${m.modem_number}" ${openSet.has(String(m.modem_number)) ? "open" : ""} 
+                        style="margin-bottom:8px; border:1px solid #334155; border-radius:8px; padding:8px;">
+                    <summary style="cursor:pointer; font-weight:bold;">
+                        Modem ${m.modem_number} | ${m.status || 'unknown'} | ${m.network || '-'} | seen ${m.last_seen || '-'}
+                    </summary>
+                    <div style="margin-top:8px; font-family:monospace; font-size:12px; color:#cbd5e1;">
+                        MSISDN: ${m.msisdn || '-'}<br>
+                        Operator: ${m.operator || '-'}<br>
+                        RAT: ${m.rat || '-'}<br>
+                        RSSI: ${m.rssi || '-'}<br>
+                        SNR: ${m.snr || '-'}<br>
+                        Registration: ${m.registration_status || '-'}<br>
+                        Error: ${m.error || '-'}
+                    </div>
+                </details>
+            `).join('');
+        }
+
 
         // Function to cleanup database
         function cleanupDB() {
@@ -197,7 +238,12 @@
                         hb.parentElement.style.borderColor = "var(--success)";
                         setTimeout(() => hb.parentElement.style.borderColor = "#ffffff10", 300);
                     }
-                });
+                })
+                .catch(err => console.error('get_status failed:', err));
+            fetch('/get_modems')
+                .then(r => r.json())
+                .then(data => renderModems(data.modems || []))
+                .catch(err => console.error('get_modems failed:', err));
         }, 1000);
 
         // Get last month for the cleanup date
