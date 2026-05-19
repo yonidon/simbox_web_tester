@@ -6,10 +6,13 @@ from flask import Flask, render_template, request, jsonify, redirect
 from werkzeug.utils import secure_filename
 import phonenumbers
 from phonenumbers import PhoneNumberFormat
+from analysis_routes import analysis_bp
+
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads' # Folder to store uploaded CSV files
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True) # Ensure the upload folder exists
+app.register_blueprint(analysis_bp)
 
 # Global storage for the processed dataframe
 df_analysis = None

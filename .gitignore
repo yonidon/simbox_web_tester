@@ -17,3 +17,6 @@ uploads/simbox_export_20260316_1543_backup.csv
 uploads/simbox_export_20260316_1543.csv
 .gitignore
 uploads/simbox_export_20260405_1014.csv
+analysis_web_server/ANALYSIS_TAB_PLAN.md
+analysis_web_server/__pycache__/analysis_routes.cpython-38.pyc
+analysis_web_server/__pycache__/analyzer.cpython-38.pyc
