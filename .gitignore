@@ -20,3 +20,5 @@ uploads/simbox_export_20260405_1014.csv
 analysis_web_server/ANALYSIS_TAB_PLAN.md
 analysis_web_server/__pycache__/analysis_routes.cpython-38.pyc
 analysis_web_server/__pycache__/analyzer.cpython-38.pyc
+uploads/Hays_20260601_backup.csv
+.gitignore
