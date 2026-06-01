@@ -881,6 +881,30 @@
             title: 'Successful Calls by Operator',
             type: 'bar',
             endpoint: '/analysis/calls_by_operator'
+        },
+        {
+            id: 'cell_id_dist',
+            title: 'Cell ID Distribution',
+            type: 'pie',
+            endpoint: '/analysis/cell_id_distribution'
+        },
+        {
+            id: 'avg_rssi_cell_id',
+            title: 'Average RSSI by Cell ID',
+            type: 'bar',
+            endpoint: '/analysis/avg_rssi_by_cell_id'
+        },
+        {
+            id: 'call_success_cell_id',
+            title: 'Call Success Rate by Cell ID',
+            type: 'bar',
+            endpoint: '/analysis/call_success_by_cell_id'
+        },
+        {
+            id: 'call_success_hour',
+            title: 'Call Success Rate by Hour',
+            type: 'line',
+            endpoint: '/analysis/call_success_by_hour'
         }
     ];
 
@@ -915,7 +939,7 @@
 
         if (cfg.data) {
             // Data already provided by custom query response — render immediately
-            renderChartInPanel(cfg.id, cfg.type, cfg.data.labels, cfg.data.values);
+            renderChartInPanel(cfg.id, cfg.type, cfg.data.labels, cfg.data.values, cfg.data.label);
         } else {
             // Fetch from built-in endpoint
             fetch(cfg.endpoint)
@@ -926,12 +950,12 @@
                             `<p style="color:#94a3b8; text-align:center; padding-top:60px;">${data.error}</p>`;
                         return;
                     }
-                    renderChartInPanel(cfg.id, cfg.type, data.labels, data.values);
+                    renderChartInPanel(cfg.id, cfg.type, data.labels, data.values, data.label);
                 });
         }
     }
 
-    function renderChartInPanel(id, type, labels, values) {
+    function renderChartInPanel(id, type, labels, values, datasetLabel = 'Count') {
         const canvas = document.getElementById(`canvas-${id}`);
         if (!canvas) return;
 
@@ -949,7 +973,7 @@
             data: {
                 labels,
                 datasets: [{
-                    label: 'Count',
+                    label: datasetLabel,
                     data: values,
                     backgroundColor: colors,
                     borderColor: type === 'pie' ? '#fff' : colors,
