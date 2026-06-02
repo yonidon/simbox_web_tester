@@ -1,13 +1,27 @@
 import json
 import pandas as pd
 from flask import Blueprint, jsonify, request
+from scheduler_context import cell_code_candidates, normalize_cell_value
 
 analysis_bp = Blueprint('analysis', __name__)
 
 
 def _get_df():
     import sys
-    return getattr(sys.modules.get('__main__'), 'df_analysis', None)
+    for module_name in ('__main__', 'analyzer', 'analysis_web_server.analyzer'):
+        df = getattr(sys.modules.get(module_name), 'df_analysis', None)
+        if df is not None:
+            return df
+    return None
+
+
+def _get_scheduler_context():
+    import sys
+    for module_name in ('__main__', 'analyzer', 'analysis_web_server.analyzer'):
+        context = getattr(sys.modules.get(module_name), 'scheduler_context', None)
+        if context is not None:
+            return context
+    return None
 
 
 def _clean_category(series):
@@ -40,6 +54,20 @@ def _success_rate_series(df):
             return 0.0
 
     return df['CALL_RESULT'].apply(calculate)
+
+
+def _highlight_payload(labels, mode="pair"):
+    scheduler_context = _get_scheduler_context()
+    if not scheduler_context:
+        return [None for _ in labels]
+
+    highlights = []
+    for label in labels:
+        parts = [part.strip() for part in str(label).split("/")]
+        match = scheduler_context.match(parts[0], parts[1]) if mode == "pair" and len(parts) == 2 else {}
+        highlights.append(match.get("match_type"))
+
+    return highlights
 
 
 # ── Column list (used by the custom-query modal dropdown) ──────────────────
@@ -78,7 +106,59 @@ def arfcn_distribution():
         labels.append('Other')
         values.append(other)
 
-    return jsonify({"labels": labels, "values": values})
+    return jsonify({
+        "labels": labels,
+        "values": values,
+        "highlights": [None for _ in labels],
+    })
+
+
+# ── Built-in query 1b: ARFCN + code distribution (pie) ────────────────────
+
+@analysis_bp.route('/analysis/arfcn_pci_distribution')
+def arfcn_pci_distribution():
+    df = _get_df()
+    if df is None:
+        return jsonify({"error": "No data loaded"})
+    if 'ARFCN' not in df.columns:
+        return jsonify({"error": "Column 'ARFCN' is required"})
+
+    pair_rows = []
+    for _, row in df.iterrows():
+        arfcn = normalize_cell_value(row.get('ARFCN'))
+        code_candidates = cell_code_candidates(row)
+        if not arfcn or arfcn == '-1' or not code_candidates:
+            continue
+        _, code = code_candidates[0]
+        pair_rows.append({"arfcn": arfcn, "code": code})
+
+    if not pair_rows:
+        return jsonify({"labels": [], "values": [], "label": "Events", "highlights": []})
+
+    pairs = pd.DataFrame(pair_rows)
+
+    counts = (
+        pairs.groupby(['arfcn', 'code'])
+        .size()
+        .sort_values(ascending=False)
+    )
+
+    top = counts.head(15)
+    other = int(counts.iloc[15:].sum()) if len(counts) > 15 else 0
+
+    labels = [f"{arfcn} / {code}" for arfcn, code in top.index]
+    values = [int(v) for v in top.values]
+
+    if other > 0:
+        labels.append('Other')
+        values.append(other)
+
+    return jsonify({
+        "labels": labels,
+        "values": values,
+        "label": "Events",
+        "highlights": _highlight_payload(labels, "pair"),
+    })
 
 
 # ── Built-in query 2: Successful calls by ARFCN (bar) ─────────────────────
@@ -101,9 +181,12 @@ def calls_by_arfcn():
         .head(20)
     )
 
+    labels = grouped.index.tolist()
+
     return jsonify({
-        "labels": grouped.index.tolist(),
-        "values": [int(v) for v in grouped.values]
+        "labels": labels,
+        "values": [int(v) for v in grouped.values],
+        "highlights": [None for _ in labels],
     })
 
 
@@ -273,9 +356,12 @@ def custom_query():
         .head(25)
     )
 
+    labels = grouped.index.tolist()
+
     return jsonify({
-        "labels": grouped.index.tolist(),
+        "labels": labels,
         "values": [int(v) for v in grouped.values],
         "title": title,
-        "chart_type": chart_type
+        "chart_type": chart_type,
+        "highlights": [None for _ in labels],
     })

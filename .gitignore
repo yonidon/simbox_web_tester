@@ -22,3 +22,11 @@ analysis_web_server/__pycache__/analysis_routes.cpython-38.pyc
 analysis_web_server/__pycache__/analyzer.cpython-38.pyc
 uploads/Hays_20260601_backup.csv
 .gitignore
+scheduler_uploads/schedule_operation_4.2026318113047.csv
+scheduler_uploads/schedule_operation_4.20263181130471.csv
+uploads/hays_20260602_1201_backup.csv
+uploads/hays_20260602_1201.csv
+.gitignore
+uploads/scheduler_schedule_operation_4.2026318113047.csv
+uploads/scheduler_Hays_20260601.csv
+analysis_web_server/__pycache__/scheduler_context.cpython-38.pyc

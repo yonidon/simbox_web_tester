@@ -7,15 +7,26 @@ from werkzeug.utils import secure_filename
 import phonenumbers
 from phonenumbers import PhoneNumberFormat
 from analysis_routes import analysis_bp
+from scheduler_context import SchedulerContext, cell_code_candidates, normalize_cell_value
 
 
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads' # Folder to store uploaded CSV files
+app.config['SCHEDULER_UPLOAD_FOLDER'] = 'scheduler_uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True) # Ensure the upload folder exists
+os.makedirs(app.config['SCHEDULER_UPLOAD_FOLDER'], exist_ok=True)
 app.register_blueprint(analysis_bp)
+LEGACY_SCHEDULER_UPLOAD_PREFIX = "scheduler_"
 
 # Global storage for the processed dataframe
 df_analysis = None
+scheduler_context = SchedulerContext()
+
+
+def annotate_scheduler_matches(records):
+    for record in records:
+        record["__scheduler_match"] = scheduler_context.match_record(record)
+    return records
 
 def calculate_success_rate(call_result_str):
     '''Calculates the percentage of "OK" results in the call_result array of a modem survey'''
@@ -90,6 +101,64 @@ def upload_file():
     df_analysis = df
     return redirect('/')
 
+
+@app.route('/upload_scheduler', methods=['POST'])
+def upload_scheduler():
+    '''Endpoint to upload the current transmitted scheduler cells CSV.'''
+    global scheduler_context
+
+    if 'file' not in request.files:
+        return jsonify({"error": "No scheduler CSV provided"})
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({"error": "No scheduler CSV selected"})
+
+    filename = secure_filename(file.filename)
+    filepath = os.path.join(app.config['SCHEDULER_UPLOAD_FOLDER'], filename)
+    file.save(filepath)
+
+    try:
+        scheduler_context = SchedulerContext.from_csv(filepath, filename=filename)
+    except Exception as exc:
+        return jsonify({"error": str(exc)})
+
+    return redirect('/')
+
+
+@app.route('/scheduler_status')
+def scheduler_status():
+    return jsonify(scheduler_context.status())
+
+
+@app.route('/list_scheduler_uploads')
+def list_scheduler_uploads():
+    '''Endpoint to list uploaded scheduler CSV files for selection in the frontend.'''
+    files = [
+        f for f in os.listdir(app.config['SCHEDULER_UPLOAD_FOLDER'])
+        if f.lower().endswith('.csv')
+    ]
+    return jsonify(sorted(files))
+
+
+@app.route('/load_scheduler_file/<filename>')
+def load_scheduler_file(filename):
+    '''Endpoint to load a selected scheduler CSV and activate its cell highlights.'''
+    global scheduler_context
+
+    filename = secure_filename(filename)
+    filepath = os.path.join(app.config['SCHEDULER_UPLOAD_FOLDER'], filename)
+
+    if not os.path.exists(filepath):
+        return jsonify({"error": "Scheduler file not found"})
+
+    try:
+        scheduler_context = SchedulerContext.from_csv(filepath, filename=filename)
+    except Exception as exc:
+        return jsonify({"error": str(exc)})
+
+    return jsonify({"status": "loaded", **scheduler_context.status()})
+
 @app.route('/get_data')
 def get_data():
     '''Endpoint to provide processed data for frontend visualization'''
@@ -108,9 +177,9 @@ def get_data():
         df_clean = df_clean[df_clean['SESSION_NAME'] == session_filter]
     
     # Map Markers
-    markers = df_clean.to_dict(orient='records')
+    markers = annotate_scheduler_matches(df_clean.to_dict(orient='records'))
     
-    # Grid Logic - Group data into ~20m x 20m cells and calculate operator success rates and EARFCN/PCI distributions
+    # Grid Logic - Group data into ~20m x 20m cells and calculate operator success rates and ARFCN/code distributions
     grid_size = 0.0002
     df_clean['grid_lat'] = (df_clean['LATITUDE'] / grid_size).apply(lambda x: round(x) * grid_size)
     df_clean['grid_lng'] = (df_clean['LONGITUDE'] / grid_size).apply(lambda x: round(x) * grid_size)
@@ -122,28 +191,56 @@ def get_data():
         # 1. Success rate per operator in THIS cell
         op_stats = group.groupby('OPERATOR')['SUCCESS_RATE'].mean().round(1).to_dict()
         
-        # 2. Local EARFCN + PCI Pair Distribution
-        pair_dist = (
-            group
-            .groupby(['ARFCN', 'PCI'])
-            .size()
-            .div(len(group))
-            .mul(100)
-            .round(1)
-        )
+        # 2. Local ARFCN + code distribution. Code maps to PCI/PSC/BSIC depending on RAT.
+        pair_rows = []
+        for _, row in group.iterrows():
+            normalized_arfcn = normalize_cell_value(row.get('ARFCN'))
+            code_candidates = cell_code_candidates(row)
+            if not normalized_arfcn or not code_candidates:
+                continue
+            code_column, normalized_code = code_candidates[0]
+            pair_rows.append({
+                "arfcn": normalized_arfcn,
+                "code": normalized_code,
+                "code_column": code_column,
+            })
 
-        # Convert multi-index to readable dictionary
-        pair_dist_dict = {
-            f"EARFCN {int(arfcn)} / PCI {int(pci)}": perc
-            for (arfcn, pci), perc in pair_dist.items()
-            if pd.notna(arfcn) and pd.notna(pci)
-        }
+        if pair_rows:
+            pair_dist = (
+                pd.DataFrame(pair_rows)
+                .groupby(['arfcn', 'code', 'code_column'])
+                .size()
+                .div(len(group))
+                .mul(100)
+                .round(1)
+            )
+        else:
+            pair_dist = pd.Series(dtype=float)
+
+        pair_dist_dict = {}
+        pair_dist_items = []
+        for (normalized_arfcn, normalized_code, code_column), perc in pair_dist.items():
+            if not normalized_arfcn or not normalized_code:
+                continue
+
+            label = f"ARFCN {normalized_arfcn} / {code_column} {normalized_code}"
+            match = scheduler_context.match(normalized_arfcn, normalized_code, code_column=code_column)
+            pair_dist_dict[label] = perc
+            pair_dist_items.append({
+                "label": label,
+                "arfcn": normalized_arfcn,
+                "code": normalized_code,
+                "code_column": code_column,
+                "percent": perc,
+                "scheduler_match": match,
+            })
         
         grid_data.append({
             "lat": glat,
             "lng": glng,
             "operators": op_stats,
             "pair_dist": pair_dist_dict,
+            "pair_dist_items": pair_dist_items,
             "total_samples": len(group)
         })
 
@@ -184,7 +281,7 @@ def get_modems():
     # Clean NaN
     latest = latest.replace({float('nan'): None})
 
-    return jsonify(latest.to_dict(orient='records'))
+    return jsonify(annotate_scheduler_matches(latest.to_dict(orient='records')))
 
 
 ############## ENDPOINTS FOR CHOOSING FILES FROM UPLOAD FOLDER ##############
@@ -193,7 +290,7 @@ def list_uploads():
     '''Endpoint to list all uploaded CSV files for selection in the frontend'''
     files = [
         f for f in os.listdir(app.config['UPLOAD_FOLDER'])
-        if f.lower().endswith('.csv')
+        if f.lower().endswith('.csv') and not f.startswith(LEGACY_SCHEDULER_UPLOAD_PREFIX)
     ]
     return jsonify(sorted(files))
 
@@ -203,6 +300,9 @@ def load_file(filename):
     global df_analysis
 
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+
+    if filename.startswith(LEGACY_SCHEDULER_UPLOAD_PREFIX):
+        return jsonify({"error": "Scheduler CSVs cannot be loaded as SIMBOX data"})
 
     if not os.path.exists(filepath):
         return jsonify({"error": "File not found"})
@@ -345,7 +445,7 @@ def get_table():
             axis=1
         )]
 
-    return jsonify(df.to_dict(orient='records'))
+    return jsonify(annotate_scheduler_matches(df.to_dict(orient='records')))
 
 # Start the Flask app
 if __name__ == '__main__':

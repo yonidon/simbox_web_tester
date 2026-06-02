@@ -87,6 +87,10 @@
 
         .stats-container { flex: 1; overflow-y: auto; margin-top: 20px; }
         .local-stat-box { background: #0f172a; padding: 12px; border-radius: 6px; margin-bottom: 8px; border-left: 4px solid var(--accent); font-size: 13px; }
+        .local-stat-box.scheduler-match { border-left-color: #f97316; background: #1f2937; box-shadow: inset 0 0 0 1px rgba(249,115,22,0.35); }
+        .scheduler-chip { display: inline-block; margin-left: 6px; padding: 2px 6px; border-radius: 999px; background: #fed7aa; color: #9a3412; font-size: 10px; font-weight: 800; letter-spacing: 0.02em; vertical-align: middle; }
+        .scheduler-value { background: #ffedd5; color: #9a3412; border-radius: 4px; padding: 1px 4px; font-weight: 700; }
+        #dbTable td.scheduler-cell { background: #ffedd5; color: #9a3412; font-weight: 700; box-shadow: inset 0 0 0 1px #fdba74; }
         
         .btn-upload { background: var(--accent); color: white; border: none; padding: 10px; width: 100%; border-radius: 4px; cursor: pointer; font-weight: bold; }
         input[type="file"] { margin-bottom: 10px; font-size: 12px; }
@@ -249,7 +253,7 @@
         <hr class="sidebar-divider">
         
         <div class="sidebar-section"> 
-            <h3 style="margin-top:20px;">Load New CSV</h3>  
+            <h3 style="margin-top:20px;">Load  Simbox CSV</h3>  
             <form action="/upload" method="post" enctype="multipart/form-data" style="margin-bottom:20px;">
                 <input type="file" name="file" required>
                 <button class="btn-upload">IMPORT DATA</button>
@@ -257,9 +261,19 @@
         </div>
 
         <div class="sidebar-section">
-            <h3 style="margin-top:20px;">Load Existing CSV</h3>
             <select id="csvSelector" style="width:100%; padding:8px; margin-bottom:10px;"></select>
-            <button class="btn-upload" onclick="loadSelectedFile()">LOAD SELECTED</button>
+            <button class="btn-upload" onclick="loadSelectedFile()">LOAD SELECTED SIMBOX</button>
+        </div>
+
+        <div class="sidebar-section">
+            <h3 style="margin-top:20px;">Load Scheduler CSV</h3>
+            <form action="/upload_scheduler" method="post" enctype="multipart/form-data" style="margin-bottom:10px;">
+                <input type="file" name="file" accept=".csv" required>
+                <button class="btn-upload">IMPORT SCHEDULER</button>
+            </form>
+            <select id="schedulerCsvSelector" style="width:100%; padding:8px; margin-bottom:10px;"></select>
+            <button class="btn-upload" onclick="loadSelectedSchedulerFile()" style="margin-bottom:10px;">LOAD SELECTED SCHEDULER</button>
+            <p id="schedulerStatus" style="font-size: 13px; color: #94a3b8; margin: 0;">No scheduler loaded</p>
         </div>
 
         <hr class="sidebar-divider">
@@ -386,6 +400,49 @@
     let map, chart;
     const gridLayer = L.layerGroup();
     const markerLayer = L.layerGroup();
+
+    function schedulerMatchFor(row) {
+        return row && row.__scheduler_match ? row.__scheduler_match : {};
+    }
+
+    function schedulerBadge(match) {
+        if (!match) return '';
+        return match.pair_match ? '<span class="scheduler-chip">Guardian ARFCN+Code</span>' : '';
+    }
+
+    function schedulerValue(value, isHighlighted) {
+        const text = value === null || value === undefined ? '' : value;
+        return isHighlighted ? `<span class="scheduler-value">${text}</span>` : text;
+    }
+
+    function shouldHighlightField(row, key) {
+        const match = schedulerMatchFor(row);
+        return !!match.pair_match && (key === 'ARFCN' || key === match.code_column);
+    }
+
+    function observedCodeLabel(row) {
+        const match = schedulerMatchFor(row);
+        const column = match.code_column || ['PCI', 'PSC', 'BSIC'].find(key => {
+            const value = row[key];
+            return value !== null && value !== undefined && value !== '' && value !== -1 && value !== '-1';
+        });
+        if (!column) return 'Code: ';
+        return `${column}: ${schedulerValue(row[column], shouldHighlightField(row, column))}`;
+    }
+
+    function loadSchedulerStatus() {
+        fetch('/scheduler_status')
+            .then(r => r.json())
+            .then(status => {
+                const el = document.getElementById('schedulerStatus');
+                if (!el) return;
+                if (!status.loaded) {
+                    el.innerText = 'No scheduler loaded';
+                    return;
+                }
+                el.innerText = `${status.filename}: ${status.pair_count} ARFCN+code pairs`;
+            });
+    }
 
     // Function to collapse/expand side bar
     function toggleSection(id) {
@@ -529,7 +586,7 @@
             if (!rows.length) return;
 
             // headers
-            const headers = Object.keys(rows[0]);
+            const headers = Object.keys(rows[0]).filter(h => !h.startsWith('__'));
             const headRow = document.createElement('tr');
 
             headers.forEach(h => {
@@ -552,6 +609,9 @@
                     td.innerText = r[h];
                     td.style.border = "1px solid #ddd";
                     td.style.padding = "6px";
+                    if (shouldHighlightField(r, h)) {
+                        td.classList.add('scheduler-cell');
+                    }
                     tr.appendChild(td);
                 });
 
@@ -576,6 +636,8 @@
                     let color = '#ef4444';
                     if (m.SUCCESS_RATE >= 80) color = '#22c55e';
                     else if (m.SUCCESS_RATE >= 50) color = '#eab308';
+                    const schedulerMatch = schedulerMatchFor(m);
+                    if (schedulerMatch.any_match) color = '#f97316';
 
                     let html = `
                         <div style="
@@ -592,6 +654,7 @@
                     `;
 
                     for (let [key, value] of Object.entries(m)) {
+                        if (key.startsWith('__')) continue;
 
                         // Pretty JSON arrays
                         if (typeof value === 'string' && value.startsWith('[')) {
@@ -605,7 +668,7 @@
                                 padding:4px 0;
                                 border-bottom:1px solid #eee;
                             ">
-                                <b>${key}</b>: ${value}
+                                <b>${key}</b>: ${schedulerValue(value, shouldHighlightField(m, key))}${key === 'ARFCN' ? schedulerBadge(schedulerMatch) : ''}
                             </div>
                         `;
                     }
@@ -618,6 +681,8 @@
     }
     
     loadCsvList();
+    loadSchedulerCsvList();
+    loadSchedulerStatus();
     initMap();
     loadMapData(); // Initial load
 
@@ -647,6 +712,7 @@
                 data.markers.forEach(m => {
                 // 1. Apply jitter so overlapping modems are visible
                 const [jitterLat, jitterLng] = applyJitter(m.LATITUDE, m.LONGITUDE);
+                const schedulerMatch = schedulerMatchFor(m);
 
                 let markerColor;
 
@@ -667,8 +733,8 @@
 
                 const marker = L.circleMarker([jitterLat, jitterLng], {
                     radius: radius,
-                    color: '#ffffff',
-                    weight: 2,
+                    color: schedulerMatch.any_match ? '#f97316' : '#ffffff',
+                    weight: schedulerMatch.any_match ? 4 : 2,
                     fillColor: markerColor,
                     fillOpacity: 0.9
                 }).addTo(markerLayer);
@@ -706,6 +772,7 @@
                     </h4>`;
 
                     for (let [key, value] of Object.entries(m)) {
+                        if (key.startsWith('__')) continue;
 
                         // Pretty format for arrays or JSON strings
                         if (typeof value === 'string' && value.startsWith('[')) {
@@ -716,7 +783,7 @@
 
                         html += `
                             <div class="local-stat-box">
-                                <b>${key}</b>: ${value}
+                                <b>${key}</b>: ${schedulerValue(value, shouldHighlightField(m, key))}${key === 'ARFCN' ? schedulerBadge(schedulerMatch) : ''}
                             </div>
                         `;
                     }
@@ -731,8 +798,8 @@
                         <hr style="margin: 5px 0; border: 0; border-top: 1px solid #eee;"/>
                         <b>Operator:</b> ${m.OPERATOR} (${m.RAT})<br/>
                         <b>Signal:</b> RSSI: ${m.RSSI} | SNR: ${m.SNR}<br/>
-                        <b>Cell ID:</b> ${m.CELL_ID} (PCI: ${m.PCI})<br/>
-                        <b>ARFCN:</b> ${m.ARFCN}<br/>
+                        <b>Cell ID:</b> ${m.CELL_ID} (${observedCodeLabel(m)})<br/>
+                        <b>ARFCN:</b> ${schedulerValue(m.ARFCN, schedulerMatch.pair_match)} ${schedulerBadge(schedulerMatch)}<br/>
                         <b>IMEI:</b> <span style="font-family:monospace;">${m.IMEI}</span><br/>
                         <b>IMSI:</b> <span style="font-family:monospace;">${m.IMSI}</span><br/>
                         <b>Time:</b> ${new Date(m.TIMESTAMP).toLocaleTimeString()}<br/>
@@ -755,10 +822,11 @@
                 const rates = Object.values(g.operators);
                 const avg = rates.reduce((a, b) => a + b, 0) / rates.length;
                 const color = avg > 80 ? '#22c55e' : (avg > 50 ? '#eab308' : '#ef4444');
+                const hasSchedulerMatch = (g.pair_dist_items || []).some(item => item.scheduler_match && item.scheduler_match.any_match);
 
                 const rect = L.rectangle(
                     [[g.lat - 0.0001, g.lng - 0.0001], [g.lat + 0.0001, g.lng + 0.0001]],
-                    { color: color, weight: 1, fillOpacity: 0.3, pane: 'gridPane' }
+                    { color: hasSchedulerMatch ? '#f97316' : color, weight: hasSchedulerMatch ? 3 : 1, fillOpacity: 0.3, pane: 'gridPane' }
                 ).addTo(gridLayer);
 
                 let tip = `<b>Area Summary</b><br>`;
@@ -772,11 +840,13 @@
                     $('#gridHint').hide();
                     let html = `<h4 style="margin:15px 0 10px 0; color:var(--accent)">Area Stats</h4>`;
                     
-                    html += `<b>EARFCN / PCI Distribution:</b>`;
+                    html += `<b>ARFCN / Code Distribution:</b>`;
 
-                    for (let [pair, perc] of Object.entries(g.pair_dist)) {
-                        html += `<div class="local-stat-box">${pair}: <b>${perc}%</b></div>`;
-                    }
+                    const pairItems = g.pair_dist_items || Object.entries(g.pair_dist).map(([label, percent]) => ({ label, percent, scheduler_match: {} }));
+                    pairItems.forEach(item => {
+                        const match = item.scheduler_match || {};
+                        html += `<div class="local-stat-box ${match.any_match ? 'scheduler-match' : ''}">${item.label}: <b>${item.percent}%</b>${schedulerBadge(match)}</div>`;
+                    });
                     $('#localStats').html(html);
                 });
             });
@@ -807,6 +877,30 @@
                 });
             });
     }
+
+    function loadSchedulerCsvList() {
+        fetch('/list_scheduler_uploads')
+            .then(r => r.json())
+            .then(files => {
+                const sel = document.getElementById('schedulerCsvSelector');
+                sel.innerHTML = '';
+
+                if (!files.length) {
+                    const opt = document.createElement('option');
+                    opt.value = '';
+                    opt.text = 'No saved scheduler CSVs';
+                    sel.add(opt);
+                    return;
+                }
+
+                files.forEach(f => {
+                    const opt = document.createElement('option');
+                    opt.value = opt.text = f;
+                    sel.add(opt);
+                });
+            });
+    }
+
     // Load the selected CSV file and refresh the map
     function loadSelectedFile() {
     const filename = document.getElementById('csvSelector').value;
@@ -816,6 +910,25 @@
             .then(res => {
                 if(res.status === "loaded") {
                     location.reload();  // refresh map data
+                }
+            });
+    }
+
+    function loadSelectedSchedulerFile() {
+        const filename = document.getElementById('schedulerCsvSelector').value;
+
+        if (!filename) {
+            alert("No scheduler CSV selected");
+            return;
+        }
+
+        fetch(`/load_scheduler_file/${filename}`)
+            .then(r => r.json())
+            .then(res => {
+                if(res.status === "loaded") {
+                    location.reload();
+                } else {
+                    alert("Error: " + res.error);
                 }
             });
     }
@@ -869,6 +982,12 @@
             title: 'ARFCN Distribution',
             type: 'pie',
             endpoint: '/analysis/arfcn_distribution'
+        },
+        {
+            id: 'arfcn_pci_dist',
+            title: 'ARFCN / Code Distribution',
+            type: 'pie',
+            endpoint: '/analysis/arfcn_pci_distribution'
         },
         {
             id: 'calls_arfcn',
@@ -939,7 +1058,7 @@
 
         if (cfg.data) {
             // Data already provided by custom query response — render immediately
-            renderChartInPanel(cfg.id, cfg.type, cfg.data.labels, cfg.data.values, cfg.data.label);
+            renderChartInPanel(cfg.id, cfg.type, cfg.data.labels, cfg.data.values, cfg.data.label, cfg.data.highlights);
         } else {
             // Fetch from built-in endpoint
             fetch(cfg.endpoint)
@@ -950,12 +1069,12 @@
                             `<p style="color:#94a3b8; text-align:center; padding-top:60px;">${data.error}</p>`;
                         return;
                     }
-                    renderChartInPanel(cfg.id, cfg.type, data.labels, data.values, data.label);
+                    renderChartInPanel(cfg.id, cfg.type, data.labels, data.values, data.label, data.highlights);
                 });
         }
     }
 
-    function renderChartInPanel(id, type, labels, values, datasetLabel = 'Count') {
+    function renderChartInPanel(id, type, labels, values, datasetLabel = 'Count', highlights = []) {
         const canvas = document.getElementById(`canvas-${id}`);
         if (!canvas) return;
 
@@ -966,7 +1085,15 @@
         // Use horizontal bar when there are many categories (more readable)
         const horizontal = (type === 'bar' && labels.length > 6);
 
-        const colors = labels.map((_, i) => PANEL_COLORS[i % PANEL_COLORS.length]);
+        const colors = labels.map((_, i) => {
+            if (highlights[i] === 'pair') return '#f97316';
+            return PANEL_COLORS[i % PANEL_COLORS.length];
+        });
+        const borderColors = labels.map((_, i) => {
+            if (highlights[i]) return '#7c2d12';
+            return type === 'pie' ? '#fff' : colors[i];
+        });
+        const borderWidths = labels.map((_, i) => highlights[i] ? 4 : (type === 'pie' ? 2 : 1));
 
         const chartCfg = {
             type: type === 'line' ? 'line' : type,
@@ -976,8 +1103,8 @@
                     label: datasetLabel,
                     data: values,
                     backgroundColor: colors,
-                    borderColor: type === 'pie' ? '#fff' : colors,
-                    borderWidth: type === 'pie' ? 2 : 1,
+                    borderColor: borderColors,
+                    borderWidth: borderWidths,
                     fill: false
                 }]
             },
